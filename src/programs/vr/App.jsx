@@ -257,69 +257,53 @@ export default function VR5Tool() {
   // 오버레이 회계 (이동평균, 표시용)
   const acct = useMemo(() => accountingFromFills(ledger), [ledger]);
 
-  const L = "text-[11px] uppercase tracking-wide text-slate-400 font-medium";
-  const card = "rounded-xl border border-slate-200 bg-white";
-  const inp = "w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm font-mono tabular-nums focus:outline-none focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500";
+  const L = "text-[11px] uppercase tracking-wide text-zinc-500 font-medium";
+  const card = "rounded-xl border border-zinc-800 bg-zinc-900/40";
+  const inp = "w-full rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1.5 text-sm text-zinc-100 font-mono tabular-nums placeholder-zinc-600 focus:outline-none focus:border-amber-400";
+  const FONT = { fontFamily: "'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif" };
 
-  if (!loaded) return <div className="min-h-screen bg-slate-50 flex items-center justify-center text-sm text-slate-400">불러오는 중…</div>;
+  if (!loaded) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-sm text-zinc-500">불러오는 중…</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 px-4 py-6 sm:px-6">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-6 sm:px-6" style={FONT}>
       <div className="mx-auto max-w-5xl">
         {/* 헤더 */}
         <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-600">밸류리밸런싱 · VR 5.0</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-400">밸류리밸런싱 · VR 5.0</div>
             <h1 className="text-2xl font-bold tracking-tight">적립식 자동 주문 계산기</h1>
-            <p className="text-sm text-slate-500 mt-0.5">TQQQ · 달러 기준 · 2주 1사이클 · LOC 사다리</p>
-          </div>
-          <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium ${allPass ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
-            <span className={`h-2 w-2 rounded-full ${allPass ? "bg-emerald-500" : "bg-rose-500"}`} />
-            소스 대조 self-test {allPass ? "전체 통과" : "실패"}
+            <p className="text-sm text-zinc-500 mt-0.5">TQQQ · 달러 기준 · 2주 1사이클 · LOC 사다리</p>
           </div>
         </div>
 
-        {/* self-test 상세 */}
-        <details className={`${card} mb-5 px-4 py-3`}>
-          <summary className="cursor-pointer text-sm font-medium text-slate-700">검증 내역 ({tests.filter(t=>t.pass).length}/{tests.length})</summary>
-          <div className="mt-3 space-y-2">
-            {tests.map((t, i) => (
-              <div key={i} className="text-xs font-mono flex flex-col gap-0.5 border-b border-slate-100 pb-2 last:border-0">
-                <div className="flex items-center gap-2">
-                  <span className={t.pass ? "text-emerald-600" : "text-rose-600"}>{t.pass ? "PASS" : "FAIL"}</span>
-                  <span className="text-slate-600 font-sans">{t.name}</span>
-                </div>
-                <div className="text-slate-400 pl-10">기대 {String(t.exp)} · 결과 {String(t.got)}</div>
-              </div>
-            ))}
-          </div>
-        </details>
-
         {/* 설정 */}
         <div className={`${card} p-4 mb-4`}>
-          <div className="text-sm font-semibold mb-3">설정 <span className="text-slate-400 font-normal">— 언제든 변경 가능 (다음 사이클부터 반영)</span></div>
+          <div className="text-sm font-semibold mb-3">설정 <span className="text-zinc-500 font-normal">— 언제든 변경 가능 (다음 사이클부터 반영)</span></div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <label className="block"><span className={L}>G (기울기)</span>
               <input className={inp} type="number" value={G} onChange={(e)=>setG(e.target.value)} />
+              <p className="text-[10px] text-zinc-500 mt-1 leading-snug">높일수록 목표를 천천히 키워 <b className="text-zinc-400">보수적</b>, 낮출수록 빠르게 키워 <b className="text-zinc-400">공격적</b>.</p>
             </label>
             <label className="block"><span className={L}>밴드폭 ±</span>
               <select className={inp} value={band} onChange={(e)=>setBand(Number(e.target.value))}>
                 <option value={0.05}>5%</option><option value={0.10}>10%</option>
                 <option value={0.15}>15%</option><option value={0.20}>20%</option>
               </select>
+              <p className="text-[10px] text-zinc-500 mt-1 leading-snug">넓힐수록 <b className="text-zinc-400">덜 사고팜</b>(빈도↓), 좁힐수록 <b className="text-zinc-400">자주 매매</b>(빈도↑).</p>
             </label>
             <label className="block"><span className={L}>Pool 사용한도</span>
               <select className={inp} value={usage} onChange={(e)=>setUsage(Number(e.target.value))}>
                 <option value={0.25}>25%</option><option value={0.50}>50%</option>
                 <option value={0.75}>75%</option><option value={1.0}>100%</option>
               </select>
+              <p className="text-[10px] text-zinc-500 mt-1 leading-snug">높일수록 하락 초반에 <b className="text-zinc-400">많이 담고</b>, 낮출수록 더 깊은 하락에 <b className="text-zinc-400">여력</b>을 남김.</p>
             </label>
             <label className="block"><span className={L}>적립금 / 사이클 ($)</span>
               <input className={inp} type="number" value={deposit} onChange={(e)=>setDeposit(e.target.value)} />
             </label>
           </div>
           {state && (
-            <button onClick={syncParams} className="mt-3 text-xs rounded-md bg-slate-100 hover:bg-slate-200 px-3 py-1.5 font-medium">현재 사이클에 설정 즉시 적용</button>
+            <button onClick={syncParams} className="mt-3 text-xs rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-3 py-1.5 font-medium">현재 사이클에 설정 즉시 적용</button>
           )}
         </div>
 
@@ -344,11 +328,11 @@ export default function VR5Tool() {
                 <input className={inp} type="number" value={initPrice} onChange={(e)=>setInitPrice(e.target.value)} placeholder="현재가 입력" />
               </label>
             </div>
-            <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+            <div className="mt-3 rounded-lg bg-amber-400/10 border border-amber-400/40 px-3 py-2 text-xs text-amber-200">
               초기 현금 비중은 정해진 답이 없는 <b>판단 포인트</b>다. 낮을수록 처음부터 많이 투입(공격), 높을수록 초기 하락 대비 사다리 여력(방어)이 커진다. 진입 시점이 사이클 어디인지 모르므로 30% 전후를 기본값으로 둠.
             </div>
             <button onClick={doInit} disabled={!initPrice || Number(initPrice)<=0}
-              className="mt-3 rounded-lg bg-teal-600 hover:bg-teal-700 disabled:bg-slate-300 text-white px-4 py-2 text-sm font-semibold">
+              className="mt-3 rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 px-4 py-2 text-sm font-semibold">
               시작 (사이클 0 생성)
             </button>
           </div>
@@ -361,7 +345,7 @@ export default function VR5Tool() {
             <div className={`${card} p-4 mb-4`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="text-sm font-semibold">사이클 {state.cycle} · 현재 상태</div>
-                <button onClick={reset} className="text-xs text-slate-400 hover:text-rose-600">처음부터 재설정</button>
+                <button onClick={reset} className="text-xs text-zinc-500 hover:text-blue-400">처음부터 재설정</button>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-y-3 gap-x-4">
                 <Stat label="V (목표)" v={usd(state.V)} />
@@ -372,21 +356,21 @@ export default function VR5Tool() {
                 <Stat label="평가금" v={view.evalNow!=null ? usd(view.evalNow) : "—"} />
                 <Stat label="총 자산" v={view.evalNow!=null ? usd(view.evalNow + state.pool) : "—"} />
                 <Stat label="밴드 상태" v={view.status}
-                  tone={view.status==="매수 구간"?"emerald":view.status==="매도 구간"?"rose":"slate"} />
+                  tone={view.status==="매수 구간"?"red":view.status==="매도 구간"?"blue":"slate"} />
               </div>
               {/* 오버레이 회계 (read-only) */}
-              <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4">
+              <div className="mt-3 pt-3 border-t border-zinc-800 grid grid-cols-2 sm:grid-cols-4 gap-y-2 gap-x-4">
                 <Stat label="평단 (참고·체결기준)" v={acct.heldQty>0 ? usd(acct.avgCost) : "—"} small />
-                <Stat label="실현손익 누계" v={usd(acct.realized)} small tone={acct.realized>=0?"emerald":"rose"} />
+                <Stat label="실현손익 누계" v={usd(acct.realized)} small tone={acct.realized>=0?"red":"blue"} />
                 <Stat label="투입원금 누계" v={usd(invested)} small />
                 <Stat label="총수익률" v={invested>0 && view.evalNow!=null ? (((view.evalNow+state.pool-invested)/invested)*100).toFixed(1)+"%" : "—"} small
-                  tone={view.evalNow!=null && (view.evalNow+state.pool-invested)>=0?"emerald":"rose"} />
+                  tone={view.evalNow!=null && (view.evalNow+state.pool-invested)>=0?"red":"blue"} />
               </div>
-              <div className="mt-1 text-[10px] text-slate-400">※ 평단/실현은 체결 기록 기반의 <b>관찰용 회계</b>일 뿐, VR 주문(밴드)에는 영향을 주지 않음 (원문: VR은 평단과 무관하게 매도).</div>
+              <div className="mt-1 text-[10px] text-zinc-500">※ 평단/실현은 체결 기록 기반의 <b>관찰용 회계</b>일 뿐, VR 주문(밴드)에는 영향을 주지 않음 (원문: VR은 평단과 무관하게 매도).</div>
               <div className="mt-3 flex items-center gap-2">
                 <span className={L}>현재가(종가)</span>
                 <input className={`${inp} max-w-[140px]`} type="number" value={px} onChange={(e)=>setPx(e.target.value)} placeholder="종가 입력" />
-                <span className="text-xs text-slate-400">— 밴드 상태와 체결권 진입 행 표시용</span>
+                <span className="text-xs text-zinc-500">— 밴드 상태와 체결권 진입 행 표시용</span>
               </div>
             </div>
 
@@ -394,18 +378,18 @@ export default function VR5Tool() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
               {/* 매수 */}
               <div className={`${card} overflow-hidden`}>
-                <div className="px-4 py-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-emerald-800">매수 LOC 사다리</span>
-                  <span className="text-xs text-emerald-700">사용한도 {usd(state.pool*state.usage)} ({(state.usage*100)|0}%) · {view.buy.length}주</span>
+                <div className="px-4 py-2.5 bg-red-950/40 border-b border-red-900/40 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-red-300">매수 LOC 사다리</span>
+                  <span className="text-xs text-red-400/80">사용한도 {usd(state.pool*state.usage)} ({(state.usage*100)|0}%) · {view.buy.length}주</span>
                 </div>
                 <Ladder rows={view.buy} side="buy" hit={view.buyHit} />
                 {view.buy.length===0 && <Empty t="이번 사이클 매수 여력 없음 (사용한도/잔고 소진)" />}
               </div>
               {/* 매도 */}
               <div className={`${card} overflow-hidden`}>
-                <div className="px-4 py-2.5 bg-rose-50 border-b border-rose-100 flex items-center justify-between">
-                  <span className="text-sm font-semibold text-rose-800">매도 LOC 사다리</span>
-                  <span className="text-xs text-rose-700">상위 {view.sell.length}주 표시</span>
+                <div className="px-4 py-2.5 bg-blue-950/40 border-b border-blue-900/40 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-blue-300">매도 LOC 사다리</span>
+                  <span className="text-xs text-blue-400/80">상위 {view.sell.length}주 표시</span>
                 </div>
                 <Ladder rows={view.sell} side="sell" hit={view.sellHit} />
                 {view.sell.length===0 && <Empty t="보유 수량 없음" />}
@@ -415,7 +399,7 @@ export default function VR5Tool() {
             {/* 체결 캡처 + 사이클 진행 */}
             <div className={`${card} p-4 mb-4`}>
               <div className="text-sm font-semibold mb-1">체결 반영</div>
-              <p className="text-xs text-slate-500 mb-3">종가를 입력하면 체결권에 든 사다리 행 수가 자동 계산됩니다. 실제 체결과 다르면 수만 고치세요. 확정 시 <b>그 행들의 정확한 가격</b>으로 평단/실현이 기록됩니다.</p>
+              <p className="text-xs text-zinc-500 mb-3">종가를 입력하면 체결권에 든 사다리 행 수가 자동 계산됩니다. 실제 체결과 다르면 수만 고치세요. 확정 시 <b>그 행들의 정확한 가격</b>으로 평단/실현이 기록됩니다.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <label className="block"><span className={L}>체결된 매수 주수</span>
                   <input className={inp} type="number" min="0" value={touchedFill ? nBuy : effBuy}
@@ -426,39 +410,39 @@ export default function VR5Tool() {
                     onChange={(e)=>{ setTouchedFill(true); setNSell(e.target.value); if (nBuy==="") setNBuy(String(view.buyHit)); }} />
                 </label>
                 <button onClick={applyFills} disabled={effBuy===0 && effSell===0}
-                  className="rounded-lg bg-slate-800 hover:bg-slate-900 disabled:bg-slate-300 text-white px-4 py-2 text-sm font-semibold">체결 확정 (사이클 유지)</button>
+                  className="rounded-lg bg-amber-400 hover:bg-amber-300 disabled:bg-zinc-700 disabled:text-zinc-500 text-zinc-950 px-4 py-2 text-sm font-bold">체결 확정 (사이클 유지)</button>
               </div>
               {(effBuy>0 || effSell>0) && (
-                <div className="mt-2 text-xs text-slate-500">
-                  확정 시: {effBuy>0 && <span className="text-emerald-700">매수 {effBuy}주 (−{usd(view.buy.slice(0,effBuy).reduce((a,r)=>a+r.price,0))})</span>}
+                <div className="mt-2 text-xs text-zinc-500">
+                  확정 시: {effBuy>0 && <span className="text-red-400">매수 {effBuy}주 (−{usd(view.buy.slice(0,effBuy).reduce((a,r)=>a+r.price,0))})</span>}
                   {effBuy>0 && effSell>0 && " · "}
-                  {effSell>0 && <span className="text-rose-700">매도 {effSell}주 (+{usd(view.sell.slice(0,effSell).reduce((a,r)=>a+r.price,0))})</span>}
+                  {effSell>0 && <span className="text-blue-400">매도 {effSell}주 (+{usd(view.sell.slice(0,effSell).reduce((a,r)=>a+r.price,0))})</span>}
                 </div>
               )}
 
-              <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
-                <button onClick={nextCycle} className="rounded-lg bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 text-sm font-semibold">
+              <div className="mt-4 pt-3 border-t border-zinc-800 flex flex-wrap gap-2">
+                <button onClick={nextCycle} className="rounded-lg border border-zinc-700 text-zinc-200 hover:bg-zinc-800 px-4 py-2 text-sm font-semibold">
                   다음 사이클 → (V 갱신 +{usd(state.deposit)} 적립)
                 </button>
-                <button onClick={undo} disabled={!hist.length} className="rounded-lg bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-40 px-4 py-2 text-sm font-medium">되돌리기</button>
+                <button onClick={undo} disabled={!hist.length} className="rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 disabled:opacity-40 px-4 py-2 text-sm font-medium">되돌리기</button>
               </div>
 
               {/* 안전 해치 */}
               <div className="mt-3">
-                <button onClick={()=>setReconOpen(!reconOpen)} className="text-xs text-slate-400 hover:text-slate-600">⚙ 보유·Pool 직접 보정 (증권사 오차·액면병합 시) {reconOpen?"▲":"▼"}</button>
+                <button onClick={()=>setReconOpen(!reconOpen)} className="text-xs text-zinc-500 hover:text-zinc-300">⚙ 보유·Pool 직접 보정 (증권사 오차·액면병합 시) {reconOpen?"▲":"▼"}</button>
                 {reconOpen && (
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                     <label className="block"><span className={L}>보유 수량 (현재 {f0(state.shares)})</span>
                       <input className={inp} type="number" value={reconShares} onChange={(e)=>setReconShares(e.target.value)} placeholder="변경 시만" /></label>
                     <label className="block"><span className={L}>Pool (현재 {usd(state.pool)})</span>
                       <input className={inp} type="number" value={reconPool} onChange={(e)=>setReconPool(e.target.value)} placeholder="변경 시만" /></label>
-                    <button onClick={applyRecon} className="rounded-lg bg-slate-200 hover:bg-slate-300 px-4 py-2 text-sm font-medium">보정 적용</button>
-                    <p className="sm:col-span-3 text-[10px] text-amber-600">※ 보정은 체결로 기록되지 않아 평단/실현 추정이 미세하게 어긋날 수 있음 (드물게만 사용).</p>
+                    <button onClick={applyRecon} className="rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 text-sm font-medium">보정 적용</button>
+                    <p className="sm:col-span-3 text-[10px] text-amber-400/80">※ 보정은 체결로 기록되지 않아 평단/실현 추정이 미세하게 어긋날 수 있음 (드물게만 사용).</p>
                   </div>
                 )}
               </div>
 
-              <p className="mt-3 text-xs text-slate-400">
+              <p className="mt-3 text-xs text-zinc-500">
                 흐름: ① 위 사다리를 LOC로 걸어둔다 → ② 종가 입력 후 체결분을 ‘체결 확정’ → ③ 사이클 끝에 ‘다음 사이클’로 V 갱신.
               </p>
             </div>
@@ -469,12 +453,12 @@ export default function VR5Tool() {
                 <div className="text-sm font-semibold mb-2">이력</div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs font-mono tabular-nums">
-                    <thead><tr className="text-slate-400 text-left">
+                    <thead><tr className="text-zinc-500 text-left">
                       <th className="py-1 pr-3">사이클</th><th className="pr-3">V</th><th className="pr-3">보유</th><th className="pr-3">Pool</th><th>P/V</th>
                     </tr></thead>
                     <tbody>
                       {hist.map((h,i)=>(
-                        <tr key={i} className="border-t border-slate-100 text-slate-600">
+                        <tr key={i} className="border-t border-zinc-800/60 text-zinc-400">
                           <td className="py-1 pr-3">{h.cycle}</td><td className="pr-3">{usd(h.V)}</td>
                           <td className="pr-3">{f0(h.shares)}</td><td className="pr-3">{usd(h.pool)}</td>
                           <td>{((h.pool/h.V)*100).toFixed(1)}%</td>
@@ -488,8 +472,8 @@ export default function VR5Tool() {
           </>
         )}
 
-        <p className="text-[11px] text-slate-400 mt-6 leading-relaxed">
-          엔진은 라오어 VR 5.0 문서의 공식·표를 그대로 재현하도록 검증함(상단 self-test). 가이드 기본값은 적립식 G=10 / 밴드 ±15% / Pool 75%.
+        <p className="text-[11px] text-zinc-500 mt-6 leading-relaxed">
+          엔진은 라오어 VR 5.0 문서의 공식·표를 그대로 재현하도록 검증함. 가이드 기본값은 적립식 G=10 / 밴드 ±15% / Pool 75%.
           본 도구는 매매 의사결정을 대신하지 않으며, 투자 책임은 사용자 본인에게 있음.
         </p>
       </div>
@@ -498,10 +482,10 @@ export default function VR5Tool() {
 }
 
 function Stat({ label, v, small, tone }) {
-  const c = tone==="emerald"?"text-emerald-600":tone==="rose"?"text-rose-600":"text-slate-900";
+  const c = tone==="red"?"text-red-300":tone==="blue"?"text-blue-300":"text-zinc-100";
   return (
     <div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-400 font-medium">{label}</div>
+      <div className="text-[11px] uppercase tracking-wide text-zinc-500 font-medium">{label}</div>
       <div className={`font-mono tabular-nums font-semibold ${small?"text-xs mt-1":"text-base"} ${c}`}>{v}</div>
     </div>
   );
@@ -512,8 +496,8 @@ function Ladder({ rows, side, hit }) {
   return (
     <div className="max-h-72 overflow-y-auto">
       <table className="w-full text-xs font-mono tabular-nums">
-        <thead className="sticky top-0 bg-white">
-          <tr className="text-slate-400 text-left">
+        <thead className="sticky top-0 bg-zinc-900">
+          <tr className="text-zinc-500 text-left">
             <th className="py-1.5 px-4">{buy ? "매수가" : "매도가"}</th>
             <th className="px-2">→ 보유</th>
             <th className="px-2 text-right">{buy ? "누적사용" : "누적회수"}</th>
@@ -524,11 +508,11 @@ function Ladder({ rows, side, hit }) {
           {rows.map((r, i) => {
             const inHit = i < hit;
             return (
-              <tr key={i} className={`border-t border-slate-50 ${inHit ? (buy?"bg-emerald-50":"bg-rose-50") : ""}`}>
-                <td className={`py-1.5 px-4 font-semibold ${buy?"text-emerald-700":"text-rose-700"}`}>${f2(r.price)}{inHit && <span className="ml-1 text-[10px]">●</span>}</td>
-                <td className="px-2 text-slate-500">{f0(r.shares)}</td>
-                <td className="px-2 text-right text-slate-500">${f2(r.cum)}</td>
-                <td className="px-4 text-right text-slate-700">${f2(r.poolAfter)}</td>
+              <tr key={i} className={`border-t border-zinc-800/60 ${inHit ? (buy?"bg-red-950/40":"bg-blue-950/40") : ""}`}>
+                <td className={`py-1.5 px-4 font-semibold ${buy?"text-red-300":"text-blue-300"}`}>${f2(r.price)}{inHit && <span className="ml-1 text-[10px]">●</span>}</td>
+                <td className="px-2 text-zinc-500">{f0(r.shares)}</td>
+                <td className="px-2 text-right text-zinc-500">${f2(r.cum)}</td>
+                <td className="px-4 text-right text-zinc-300">${f2(r.poolAfter)}</td>
               </tr>
             );
           })}
@@ -539,5 +523,5 @@ function Ladder({ rows, side, hit }) {
 }
 
 function Empty({ t }) {
-  return <div className="px-4 py-6 text-center text-xs text-slate-400">{t}</div>;
+  return <div className="px-4 py-6 text-center text-xs text-zinc-600">{t}</div>;
 }

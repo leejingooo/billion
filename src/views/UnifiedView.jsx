@@ -1,16 +1,23 @@
-import { useMemo } from "react";
-import { listAccounts } from "../storage/accounts";
+import { useMemo, useState } from "react";
+import { listAccounts, deleteAccount, PROGRAM_LABELS } from "../storage/accounts";
 import { buildSnapshot, portfolioTotals } from "../overlay/snapshot";
 
 const usd = (x) => (x == null || isNaN(x) ? "—" : "$" + Number(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const pct = (x) => (x == null || isNaN(x) ? "—" : (x >= 0 ? "+" : "") + x.toFixed(1) + "%");
 const sign = (x) => (x == null || isNaN(x) ? "text-zinc-400" : x >= 0 ? "text-red-400" : "text-blue-400");
 
-export default function UnifiedView({ priceMap, onPrice, tick }) {
+export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
   const accounts = useMemo(() => listAccounts(), [tick]);
   const snaps = useMemo(() => accounts.map((a) => buildSnapshot(a, priceMap)), [accounts, priceMap, tick]);
   const totals = useMemo(() => portfolioTotals(snaps), [snaps]);
   const started = snaps.filter((s) => s.started);
+  const [managing, setManaging] = useState(false);
+
+  const removeAccount = (a) => {
+    if (!confirm(`'${a.label}' 계좌를 삭제할까요?\n이 계좌의 모든 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다.`)) return;
+    deleteAccount(a.id);
+    onChange?.();
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 px-4 py-6" style={{ fontFamily: "'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif" }}>
@@ -104,6 +111,31 @@ export default function UnifiedView({ priceMap, onPrice, tick }) {
 
         {started.some((s) => s.extra && !s.extra.priceIsLive) && (
           <p className="text-[11px] text-amber-500/70 mt-3">※ 일부 계좌는 현재가 미입력 상태라 전일/직전 종가로 평가했습니다. 위 종목별 현재가를 입력하면 갱신됩니다.</p>
+        )}
+
+        {/* 계좌 관리 */}
+        {accounts.length > 0 && (
+          <div className="mt-8 pt-4 border-t border-zinc-800/70">
+            <button onClick={() => setManaging((m) => !m)}
+              className="text-xs text-zinc-500 hover:text-zinc-300">
+              계좌 관리 {managing ? "▲" : "▼"}
+            </button>
+            {managing && (
+              <div className="mt-3 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
+                {accounts.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div>
+                      <div className="text-sm text-zinc-200">{a.label}</div>
+                      <div className="text-[11px] text-zinc-500">{PROGRAM_LABELS[a.programType]}</div>
+                    </div>
+                    <button onClick={() => removeAccount(a)}
+                      className="px-3 py-1.5 text-xs rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 whitespace-nowrap">삭제</button>
+                  </div>
+                ))}
+                <p className="px-4 py-2.5 text-[11px] text-zinc-500">삭제하면 해당 계좌의 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다. (삭제 전 확인 메시지가 표시됩니다.)</p>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

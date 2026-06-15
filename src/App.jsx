@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { listAccounts, createAccount, deleteAccount, renameAccount, PROGRAM_LABELS } from "./storage/accounts";
+import { listAccounts, createAccount, PROGRAM_LABELS } from "./storage/accounts";
 import { setActiveAccount } from "./storage/adapter";
 import { runGate } from "./selftest/gate";
 import UnifiedView from "./views/UnifiedView";
@@ -89,7 +89,7 @@ export default function App() {
       </header>
 
       {tab === "unified" ? (
-        <UnifiedView priceMap={priceMap} onPrice={onPrice} tick={tick} />
+        <UnifiedView priceMap={priceMap} onPrice={onPrice} tick={tick} onChange={() => setTick((n) => n + 1)} />
       ) : (
         <ProgramTab
           programType={active.type}
@@ -105,7 +105,6 @@ export default function App() {
 function ProgramTab({ programType, selectedId, onSelect, onChange }) {
   const [accounts, setAccounts] = useState(() => listAccounts().filter((a) => a.programType === programType));
   const [newLabel, setNewLabel] = useState("");
-  const [managing, setManaging] = useState(false);
 
   const refresh = () => {
     setAccounts(listAccounts().filter((a) => a.programType === programType));
@@ -118,12 +117,6 @@ function ProgramTab({ programType, selectedId, onSelect, onChange }) {
     setNewLabel("");
     refresh();
     onSelect(a.id);
-  };
-  const remove = (id) => {
-    if (!confirm("이 계좌의 모든 데이터를 삭제할까요? 되돌릴 수 없습니다.")) return;
-    deleteAccount(id);
-    if (selectedId === id) onSelect(undefined);
-    refresh();
   };
 
   const acct = accounts.find((a) => a.id === selectedId) || null;
@@ -146,18 +139,7 @@ function ProgramTab({ programType, selectedId, onSelect, onChange }) {
               className="w-40 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400 outline-none" />
             <button onClick={create} className="px-3 py-1.5 text-sm rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700 whitespace-nowrap">+ 계좌</button>
           </div>
-          {accounts.length > 0 && (
-            <button onClick={() => setManaging(!managing)} className="ml-auto text-[11px] text-zinc-500 hover:text-zinc-300">{managing ? "완료" : "관리"}</button>
-          )}
         </div>
-        {managing && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {accounts.map((a) => (
-              <button key={a.id} onClick={() => remove(a.id)}
-                className="px-2.5 py-1 text-[11px] rounded-md border border-red-900 text-red-400 hover:bg-red-950/40">{a.label} 삭제</button>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* 프로그램 본문 */}
