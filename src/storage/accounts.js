@@ -17,6 +17,13 @@ export const PROGRAM_LABELS = {
   vr: "밸류리밸런싱 · 적립식",
 };
 
+// 통합 섹션(한 탭에 여러 programType)에서 계좌를 구분하는 짧은 배지 라벨.
+export const PROGRAM_SHORT = {
+  mubaeSingle: "SOXL40",
+  mubaeMulti: "멀티",
+  vr: "VR",
+};
+
 export function listAccounts() {
   if (!LS) return [];
   try {

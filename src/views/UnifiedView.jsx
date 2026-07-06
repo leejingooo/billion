@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { listAccounts, deleteAccount, PROGRAM_LABELS } from "../storage/accounts";
+import { listAccounts, deleteAccount, renameAccount, PROGRAM_LABELS } from "../storage/accounts";
 import { buildSnapshot, portfolioTotals } from "../overlay/snapshot";
 
 const usd = (x) => (x == null || isNaN(x) ? "—" : "$" + Number(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
@@ -12,11 +12,20 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
   const totals = useMemo(() => portfolioTotals(snaps), [snaps]);
   const started = snaps.filter((s) => s.started);
   const [managing, setManaging] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editLabel, setEditLabel] = useState("");
 
   const removeAccount = (a) => {
     if (!confirm(`'${a.label}' 계좌를 삭제할까요?\n이 계좌의 모든 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다.`)) return;
     deleteAccount(a.id);
     onChange?.();
+  };
+
+  const startRename = (a) => { setEditingId(a.id); setEditLabel(a.label); };
+  const saveRename = (a) => {
+    const label = editLabel.trim();
+    if (label && label !== a.label) { renameAccount(a.id, label); onChange?.(); }
+    setEditingId(null);
   };
 
   return (
@@ -124,15 +133,36 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
               <div className="mt-3 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
                 {accounts.map((a) => (
                   <div key={a.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
-                    <div>
-                      <div className="text-sm text-zinc-200">{a.label}</div>
+                    <div className="min-w-0 flex-1">
+                      {editingId === a.id ? (
+                        <input value={editLabel} autoFocus onChange={(e) => setEditLabel(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === "Enter") saveRename(a); if (e.key === "Escape") setEditingId(null); }}
+                          className="w-full max-w-xs bg-zinc-900 border border-amber-400 rounded-lg px-2.5 py-1.5 text-sm text-zinc-100 outline-none" />
+                      ) : (
+                        <div className="text-sm text-zinc-200 truncate">{a.label}</div>
+                      )}
                       <div className="text-[11px] text-zinc-500">{PROGRAM_LABELS[a.programType]}</div>
                     </div>
-                    <button onClick={() => removeAccount(a)}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 whitespace-nowrap">삭제</button>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {editingId === a.id ? (
+                        <>
+                          <button onClick={() => saveRename(a)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-amber-500/60 text-amber-300 hover:bg-amber-950/30 whitespace-nowrap">저장</button>
+                          <button onClick={() => setEditingId(null)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-400 hover:bg-zinc-800 whitespace-nowrap">취소</button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={() => startRename(a)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 whitespace-nowrap">이름 변경</button>
+                          <button onClick={() => removeAccount(a)}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 whitespace-nowrap">삭제</button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 ))}
-                <p className="px-4 py-2.5 text-[11px] text-zinc-500">삭제하면 해당 계좌의 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다. (삭제 전 확인 메시지가 표시됩니다.)</p>
+                <p className="px-4 py-2.5 text-[11px] text-zinc-500">이름 변경은 즉시 저장됩니다. 삭제하면 해당 계좌의 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다. (삭제 전 확인 메시지가 표시됩니다.)</p>
               </div>
             )}
           </div>

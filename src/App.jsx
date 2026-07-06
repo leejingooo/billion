@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { listAccounts, createAccount, PROGRAM_LABELS } from "./storage/accounts";
+import { listAccounts, createAccount, PROGRAM_LABELS, PROGRAM_SHORT } from "./storage/accounts";
 import { setActiveAccount } from "./storage/adapter";
 import { runGate } from "./selftest/gate";
 import UnifiedView from "./views/UnifiedView";
@@ -8,11 +8,12 @@ import MubaeMulti from "./programs/mubaeMulti/App";
 import VRTool from "./programs/vr/App";
 
 const PROGRAMS = { mubaeSingle: MubaeSingle, mubaeMulti: MubaeMulti, vr: VRTool };
+// 무한매수법은 한 섹션 아래 두 변형(SOXL40 단일·멀티)을 함께 호스팅한다.
+// LOCKED 파일은 무수정 — 통합은 라우팅/호스트 레이어에서만 처리.
 const TABS = [
-  { key: "unified", label: "통합뷰", type: null },
-  { key: "mubaeSingle", label: "무한 · SOXL40", type: "mubaeSingle" },
-  { key: "mubaeMulti", label: "무한 · 멀티", type: "mubaeMulti" },
-  { key: "vr", label: "VR 적립식", type: "vr" },
+  { key: "unified", label: "통합뷰", types: null },
+  { key: "mubae", label: "무한매수법", types: ["mubaeSingle", "mubaeMulti"] },
+  { key: "vr", label: "VR 적립식", types: ["vr"] },
 ];
 
 const PRICE_KEY = "ui:prices";
@@ -88,13 +89,15 @@ export default function App() {
         </div>
       </header>
 
-      {tab === "unified" ? (
+      {active.types === null ? (
         <UnifiedView priceMap={priceMap} onPrice={onPrice} tick={tick} onChange={() => setTick((n) => n + 1)} />
       ) : (
-        <ProgramTab
-          programType={active.type}
-          selectedId={selected[active.type]}
-          onSelect={(id) => setSelected((s) => ({ ...s, [active.type]: id }))}
+        <ProgramSection
+          key={active.key}
+          tabKey={active.key}
+          types={active.types}
+          selectedId={selected[active.key]}
+          onSelect={(id) => setSelected((s) => ({ ...s, [active.key]: id }))}
           onChange={() => setTick((n) => n + 1)}
         />
       )}
@@ -102,40 +105,58 @@ export default function App() {
   );
 }
 
-function ProgramTab({ programType, selectedId, onSelect, onChange }) {
-  const [accounts, setAccounts] = useState(() => listAccounts().filter((a) => a.programType === programType));
+// 한 섹션이 하나 이상의 programType을 호스팅한다. types.length>1 이면(무한매수법)
+// 계좌 생성 시 변형을 선택하고, 계좌 버튼에 변형 배지를 붙여 구분한다.
+function ProgramSection({ tabKey, types, selectedId, onSelect, onChange }) {
+  const multi = types.length > 1;
+  const inTypes = (a) => types.includes(a.programType);
+  const [accounts, setAccounts] = useState(() => listAccounts().filter(inTypes));
   const [newLabel, setNewLabel] = useState("");
+  const [variant, setVariant] = useState(types[0]);
 
   const refresh = () => {
-    setAccounts(listAccounts().filter((a) => a.programType === programType));
+    setAccounts(listAccounts().filter(inTypes));
     onChange?.();
   };
-  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [programType]);
+  useEffect(() => { refresh(); /* eslint-disable-next-line */ }, [tabKey]);
 
   const create = () => {
-    const a = createAccount(programType, newLabel);
+    const a = createAccount(multi ? variant : types[0], newLabel);
     setNewLabel("");
     refresh();
     onSelect(a.id);
   };
 
   const acct = accounts.find((a) => a.id === selectedId) || null;
+  const sectionLabel = multi ? "무한매수법" : PROGRAM_LABELS[types[0]];
 
   return (
     <div className="bg-zinc-950">
       {/* 계좌 바 */}
       <div className="max-w-5xl mx-auto px-4 py-3 border-b border-zinc-800/70" style={{ fontFamily: "'Pretendard', -apple-system, 'Apple SD Gothic Neo', sans-serif" }}>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] text-zinc-500 mr-1">{PROGRAM_LABELS[programType]} 계좌:</span>
+          <span className="text-[11px] text-zinc-500 mr-1">{sectionLabel} 계좌:</span>
           {accounts.map((a) => (
             <button key={a.id} onClick={() => onSelect(a.id)}
               className={`px-3 py-1.5 text-sm rounded-lg border transition ${selectedId === a.id ? "bg-amber-400 text-zinc-950 border-amber-400 font-semibold" : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500"}`}>
               {a.label}
+              {multi && <span className={`ml-1.5 text-[10px] ${selectedId === a.id ? "text-zinc-700" : "text-zinc-500"}`}>{PROGRAM_SHORT[a.programType]}</span>}
             </button>
           ))}
           {accounts.length === 0 && <span className="text-sm text-zinc-600">없음 — 새 계좌를 만드세요</span>}
           <div className="flex items-center gap-1.5 ml-1">
-            <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="새 계좌 이름(선택)"
+            {multi && (
+              <div className="flex items-center gap-0.5 rounded-lg border border-zinc-700 p-0.5">
+                {types.map((t) => (
+                  <button key={t} onClick={() => setVariant(t)}
+                    className={`px-2.5 py-1 text-xs rounded-md transition ${variant === t ? "bg-zinc-700 text-amber-300 font-semibold" : "text-zinc-400 hover:text-zinc-200"}`}>
+                    {PROGRAM_SHORT[t]}
+                  </button>
+                ))}
+              </div>
+            )}
+            <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") create(); }} placeholder="새 계좌 이름(선택)"
               className="w-40 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-sm text-zinc-100 placeholder-zinc-600 focus:border-amber-400 outline-none" />
             <button onClick={create} className="px-3 py-1.5 text-sm rounded-lg bg-zinc-800 text-zinc-200 hover:bg-zinc-700 whitespace-nowrap">+ 계좌</button>
           </div>
