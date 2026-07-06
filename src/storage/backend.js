@@ -9,8 +9,21 @@
 import { localDriver } from "./drivers/local";
 
 const ENV = (typeof import.meta !== "undefined" && import.meta.env) || {};
-export const SUPA_URL = ENV.VITE_SUPABASE_URL || "";
-export const SUPA_KEY = ENV.VITE_SUPABASE_ANON_KEY || "";
+
+// supabase-js 는 프로젝트 base URL(scheme+host)을 기대한다. 사용자가 콘솔에서
+// 복사한 `.../rest/v1/` 형태를 넣어도 동작하도록 origin 으로 정규화한다.
+function normalizeUrl(raw) {
+  const s = (raw || "").trim();
+  if (!s) return "";
+  try {
+    return new URL(s).origin;
+  } catch {
+    return s.replace(/\/+$/, "");
+  }
+}
+
+export const SUPA_URL = normalizeUrl(ENV.VITE_SUPABASE_URL);
+export const SUPA_KEY = (ENV.VITE_SUPABASE_ANON_KEY || "").trim();
 export const isServerConfigured = Boolean(SUPA_URL && SUPA_KEY);
 
 let active = localDriver;
