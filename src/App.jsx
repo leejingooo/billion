@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { listAccounts, createAccount, PROGRAM_LABELS, PROGRAM_SHORT } from "./storage/accounts";
 import { setActiveAccount } from "./storage/adapter";
+import { getDriver } from "./storage/backend";
 import { runGate } from "./selftest/gate";
 import UnifiedView from "./views/UnifiedView";
 import MubaeSingle from "./programs/mubaeSingle/App";
@@ -35,14 +36,14 @@ export default function App() {
   // 현재가 영속 복원
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(PRICE_KEY);
+      const raw = getDriver().get(PRICE_KEY);
       if (raw) setPriceMap(JSON.parse(raw));
     } catch {}
   }, []);
   const onPrice = (t, v) => {
     setPriceMap((m) => {
       const next = { ...m, [t]: v === "" ? undefined : Number(v) };
-      try { localStorage.setItem(PRICE_KEY, JSON.stringify(next)); } catch {}
+      try { getDriver().set(PRICE_KEY, JSON.stringify(next)); } catch {}
       return next;
     });
   };

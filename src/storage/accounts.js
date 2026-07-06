@@ -7,9 +7,9 @@
    ============================================================ */
 
 import { rawDeleteAccount } from "./adapter";
+import { getDriver } from "./backend";
 
 const INDEX_KEY = "accounts:index";
-const LS = typeof window !== "undefined" ? window.localStorage : null;
 
 export const PROGRAM_LABELS = {
   mubaeSingle: "무한매수법 · SOXL 40분할",
@@ -25,9 +25,8 @@ export const PROGRAM_SHORT = {
 };
 
 export function listAccounts() {
-  if (!LS) return [];
   try {
-    const raw = LS.getItem(INDEX_KEY);
+    const raw = getDriver().get(INDEX_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -35,7 +34,7 @@ export function listAccounts() {
 }
 
 function saveIndex(arr) {
-  if (LS) LS.setItem(INDEX_KEY, JSON.stringify(arr));
+  getDriver().set(INDEX_KEY, JSON.stringify(arr));
 }
 
 export function createAccount(programType, label) {
