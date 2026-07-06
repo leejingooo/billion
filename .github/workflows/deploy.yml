@@ -20,6 +20,11 @@ jobs:
           node-version: 20
       - run: npm ci
       - run: npm run build   # 릴리스 게이트 실패 시 여기서 배포 중단
+        env:
+          # 서버 저장(Supabase) 활성화 — 저장소 Settings → Secrets and variables → Actions 에 등록.
+          # 두 값이 없으면 빌드는 그대로 로컬(localStorage) 모드로 나온다(무회귀).
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
