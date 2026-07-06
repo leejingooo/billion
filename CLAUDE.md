@@ -60,17 +60,24 @@ npm run build    # 게이트 먼저 실행 → 통과 시에만 dist/ 생성
 ### 아키텍처 요점
 ```
 src/
-  storage/adapter.js    # 전역 window.storage 계좌인지 어댑터 (핵심 격리 메커니즘)
-  storage/accounts.js   # 계좌 레지스트리 (키: accounts:index / acct:{id}:*)
-  programs/             # mubaeSingle·mubaeMulti(무수정 LOCKED) + vr(엔진 verbatim)
-  overlay/              # ledger.js(체결원장→평단/실현, 순수함수), snapshot.js(AccountSnapshot)
-  views/UnifiedView.jsx # 통합뷰 (계좌 집계 + 계좌 관리/삭제)
-  selftest/gate.js      # 릴리스 게이트 (순수, React 비의존)
-  ci/run-gate.mjs       # node CI 진입점 (FAIL 시 exit 1)
-  App.jsx               # 탭 라우팅 + ProgramHost + 게이트 차단 화면
-  main.jsx              # installStorageAdapter() 먼저 → App 렌더
+  storage/adapter.js         # 전역 window.storage 계좌인지 어댑터 (핵심 격리 메커니즘)
+  storage/backend.js         # 저장 드라이버 선택기 (getDriver / initBackend)
+  storage/drivers/local.js   # 로컬 드라이버 = localStorage (기본, 무회귀)
+  storage/drivers/supabase.js# Supabase 드라이버 (hydrate→캐시 동기읽기, write-through)
+  storage/migrate.js         # 1회성 localStorage→서버 마이그레이션 (비파괴)
+  storage/accounts.js        # 계좌 레지스트리 (키: accounts:index / acct:{id}:*)
+  programs/                  # mubaeSingle·mubaeMulti(무수정 LOCKED) + vr(엔진 verbatim)
+  overlay/                   # ledger.js(체결원장→평단/실현, 순수함수), snapshot.js(AccountSnapshot)
+  views/UnifiedView.jsx      # 통합뷰 (계좌 집계 + 계좌 관리/삭제/이름변경)
+  selftest/gate.js           # 릴리스 게이트 (순수, React 비의존)
+  ci/run-gate.mjs            # node CI 진입점 (FAIL 시 exit 1)
+  Root.jsx                   # 부트 게이트: 백엔드 초기화 + (서버일 때) 로그인/hydrate → App
+  App.jsx                    # 탭 라우팅 + ProgramHost + 게이트 차단 화면
+  main.jsx                   # installStorageAdapter() 먼저 → Root 렌더
 ```
 - **프로그램 = 로직, 계좌 = 인스턴스.** 같은 programType으로 복수 계좌 가능. 계좌별 데이터는 `acct:{id}:` prefix로 격리. 계좌 전환은 `setActiveAccount(id)` 후 `<Program key={acct.id}/>` remount.
+- **저장 드라이버 seam.** 모든 저장 접근(window.storage·raw·계좌 레지스트리·ui:prices)은 `backend.getDriver()`를 거친다. 드라이버는 **동기** get/set/delete/listKeys를 제공한다 — 서버(Supabase) 드라이버는 로그인 시 사용자 KV를 메모리 캐시로 hydrate하고, 읽기는 캐시에서 동기 반환(listAccounts·통합뷰 raw 읽기 async화 불필요), 쓰기는 캐시 즉시반영+서버 write-through(last-write-wins). `VITE_SUPABASE_URL/ANON_KEY` 없으면 로컬 드라이버로 무회귀 동작.
+- **무한 섹션 통일**은 라우팅/호스트 레이어에서만 처리(App.jsx `ProgramSection`이 한 탭에 mubaeSingle·mubaeMulti 두 변형을 호스팅). LOCKED 파일 무수정.
 - 무한 회계는 원장 없이 항등식으로 역산: `invested = cash + shares×avg − realizedTotal` (native 값 읽기만). 원장(ledger)은 VR 전용이며 센트(정수) 누적으로 드리프트를 차단한다.
 - VR 체결 캡처는 rung 기반(엔진 계산가를 그대로 체결 확정). 절대값 보정은 안전 해치로만.
 
@@ -86,11 +93,11 @@ src/
 - **수익 = 빨강(red), 손실 = 파랑(blue)** — 한국 주식시장 관행. 뒤집지 말 것.
 - 탭: `[통합뷰] [무한 · SOXL40] [무한 · 멀티] [VR 적립식]`
 
-### 개선 로드맵 (진행 예정 — 착수 시 불변 원칙 준수)
-1. **무한매수법 섹션 통일** — 현재 두 탭(SOXL40 단일/멀티)로 분리된 것을 하나의 섹션으로. 단, LOCKED 파일은 무수정이므로 통합은 라우팅/호스트 레이어에서만 (예: 하나의 탭 아래 서브 선택, 두 프로그램을 그대로 호스팅).
-2. **계좌 생성/관리 UX 개선** — 더 사용자 친화적인 생성 플로우/이름 변경/정리.
-3. **서버 저장 전환** — localStorage → 서버 저장으로 다기기 동기화. 방식: `window.storage` 어댑터의 구현만 교체하고 인터페이스(get/set/delete/list, Promise 반환)는 유지하면 LOCKED 파일 무수정 원칙이 지켜진다. 백엔드 선택(예: Supabase/Firebase/자체 API)·인증·충돌 처리 방침은 사용자와 합의 후 진행.
-4. **기타 UX 개선** — 무결성 원칙을 해치지 않는 범위에서만.
+### 개선 로드맵 (진행 상태 — 착수 시 불변 원칙 준수)
+1. **무한매수법 섹션 통일** — ✅ 완료. App.jsx `ProgramSection`이 한 `무한매수법` 탭에서 SOXL40 단일·멀티 두 변형을 호스팅(생성 시 변형 선택, 계좌 배지로 구분). LOCKED 무수정.
+2. **계좌 생성/관리 UX** — ✅ 이름 변경(통합뷰 계좌 관리, `renameAccount`) + 생성 시 Enter 지원 + 변형 배지. 추가 정리(정렬/복제 등)는 여지 있음.
+3. **서버 저장 전환** — 🟡 스캐폴딩 완료, creds 대기. Supabase(이메일 매직링크)로 결정. 드라이버 seam(`storage/backend.js` + `drivers/`)·1회성 마이그레이션·`supabase/schema.sql`·`.env.example`·README 셋업까지 구현·검증(로컬 무회귀 + 더미 env 로그인 게이트). **활성화·E2E 검증에는 사용자의 실제 Supabase 프로젝트 URL+anon key가 필요**(정적 GitHub Pages 빌드에 주입). creds 받으면 드라이버만 켜서 실동기화 검증.
+4. **기타 UX 개선** — 무결성 원칙을 해치지 않는 범위에서만. (VR 설정 설명 G/밴드폭/Pool은 이미 컴포넌트에 구현됨.)
 
 ### 작업 후 검증 체크리스트
 1. `sha256sum src/programs/mubaeSingle/App.jsx src/programs/mubaeMulti/App.jsx` — 위 해시와 일치

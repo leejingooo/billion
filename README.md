@@ -23,7 +23,7 @@
 3. 장 마감 후 **종가 입력** → 자동 산출된 체결을 확인(실제와 다르면 수량만 수정) → 확정.
 4. **통합뷰**에서 종목별 현재가를 넣으면 전 계좌 수익이 한눈에.
 
-데이터는 브라우저 **localStorage**에 저장됩니다(기기/브라우저 로컬). 새로고침해도 유지됩니다.
+데이터는 기본적으로 브라우저 **localStorage**에 저장됩니다(기기/브라우저 로컬). 새로고침해도 유지됩니다. **Supabase를 연결하면 로그인 기반 서버 저장으로 전환되어 여러 기기에서 같은 데이터를 동기화**할 수 있습니다(아래 "서버 저장(Supabase)" 참고).
 
 ---
 
@@ -92,7 +92,36 @@ jobs:
 
 ---
 
+## 서버 저장(Supabase) — 다기기 동기화 (선택)
+
+환경변수 `VITE_SUPABASE_URL`·`VITE_SUPABASE_ANON_KEY`가 **둘 다 있으면** 앱이 자동으로
+Supabase 백엔드로 동작합니다(이메일 매직링크 로그인 → 로그인하면 어느 기기에서든 같은 계좌
+데이터). **없으면 기존 localStorage로 동작**(무회귀)하므로, 설정 전까지는 아무것도 바뀌지 않습니다.
+
+무결성: 저장 방식 교체는 **`window.storage` 어댑터 뒤의 드라이버 구현만** 바꿉니다.
+무한매수법 두 파일과 VR 엔진 6함수는 무수정 그대로입니다.
+
+**설정 순서**
+
+1. [supabase.com](https://supabase.com)에서 프로젝트 생성.
+2. **SQL Editor**에 `supabase/schema.sql` 내용을 붙여넣고 실행(테이블 `user_kv` + RLS).
+3. **Authentication → Providers → Email** 활성화(매직링크). Site URL / Redirect URL에
+   앱 주소(`http://localhost:5173`, 배포 주소 `https://<사용자>.github.io/<저장소>/`)를 추가.
+4. **Project Settings → API**에서 `Project URL`과 `anon public` 키를 복사.
+5. 로컬 개발: `.env.example`를 `.env.local`로 복사해 두 값을 채움(`.env.local`은 git 무시).
+6. 배포: 저장소 **Settings → Secrets and variables → Actions**에
+   `VITE_SUPABASE_URL`·`VITE_SUPABASE_ANON_KEY`를 등록하고, 배포 워크플로의 빌드 스텝에서
+   `env:`로 주입.
+
+> `anon` 키는 공개돼도 안전한 키입니다(RLS로 본인 행만 접근). `service_role` 키는 절대 넣지 마세요.
+
+**기존 로컬 데이터**: 첫 로그인 시, 이 브라우저의 localStorage에 있던 계좌·상태·현재가를
+서버로 **1회 자동 복사**합니다(비파괴적 — localStorage는 그대로 둠). 별도 수동 이전 불필요.
+
+---
+
 ## 주의
 
 - 본 도구는 매매 의사결정을 대신하지 않으며, 투자 책임은 사용자 본인에게 있습니다.
-- localStorage 기반이라 **다른 기기/브라우저와 동기화되지 않습니다.** 같은 기기·브라우저에서 쓰세요.
+- 기본(localStorage) 모드는 **다른 기기/브라우저와 동기화되지 않습니다.** 다기기로 쓰려면 위
+  "서버 저장(Supabase)"을 설정하세요.
