@@ -7,10 +7,15 @@
    ============================================================ */
 
 const FLAG = "migrated:local-v1";
+const PENDING = "migrating:local-v1";
 
 export async function migrateLocalToServer(driver) {
   if (driver.kind !== "supabase") return { migrated: false, reason: "local backend" };
   if (driver.get(FLAG)) return { migrated: false, reason: "already migrated" };
+
+  // 복사 도중 끊겨도 서버에 남긴 원본으로 재개한다. 이미 존재하는 키는 보존한다.
+  const pending = driver.get(PENDING);
+  if (pending) return finishMigration(driver, JSON.parse(pending));
 
   const LS = typeof window !== "undefined" ? window.localStorage : null;
   if (!LS) return { migrated: false, reason: "no localStorage" };
@@ -29,8 +34,21 @@ export async function migrateLocalToServer(driver) {
     return { migrated: false, reason: serverHasData ? "server already has data" : "nothing local" };
   }
 
-  for (const k of keys) driver.set(k, LS.getItem(k));
+  const entries = keys.map((k) => [k, LS.getItem(k)]);
+  driver.set(PENDING, JSON.stringify(entries));
+  await driver.flush();
+  return finishMigration(driver, entries);
+}
+
+async function finishMigration(driver, entries) {
+  for (const [key, value] of entries) {
+    if (driver.get(key) == null) driver.set(key, value);
+  }
+  await driver.flush();
+  // 완료 표시는 데이터 저장을 확인한 뒤에만 기록한다.
   driver.set(FLAG, new Date().toISOString());
   await driver.flush();
-  return { migrated: true, count: keys.length };
+  driver.delete(PENDING);
+  await driver.flush();
+  return { migrated: true, count: entries.length };
 }

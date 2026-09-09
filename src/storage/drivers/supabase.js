@@ -17,6 +17,17 @@ export function createSupabaseDriver(url, anonKey) {
   let userId = null;
   const cache = new Map();
   let writeChain = Promise.resolve(); // 순차 write-through 큐
+  const failures = new Map();
+  const listeners = new Set();
+  let pending = 0;
+
+  function writeStatus() {
+    return { pending, failed: failures.size };
+  }
+
+  function emitStatus() {
+    for (const listener of listeners) listener(writeStatus());
+  }
 
   async function getClient() {
     if (!client) {
@@ -28,10 +39,17 @@ export function createSupabaseDriver(url, anonKey) {
     return client;
   }
 
-  function enqueue(fn) {
-    writeChain = writeChain.then(fn).catch((e) => {
-      // 서버 쓰기 실패는 콘솔에만 — 캐시는 이미 반영되어 UI는 진행. 다음 hydrate 시 정정.
+  function enqueue(key, fn) {
+    pending++;
+    emitStatus();
+    writeChain = writeChain.then(fn).then(() => {
+      failures.delete(key);
+    }).catch((e) => {
+      failures.set(key, { fn, error: e });
       console.error("[supabase write]", e);
+    }).finally(() => {
+      pending--;
+      emitStatus();
     });
     return writeChain;
   }
@@ -45,19 +63,21 @@ export function createSupabaseDriver(url, anonKey) {
     },
     set(fullKey, value) {
       cache.set(fullKey, value);
-      enqueue(async () => {
-        if (!userId) return;
+      const owner = userId;
+      enqueue(fullKey, async () => {
+        if (!owner || owner !== userId) throw new Error("저장할 로그인 세션이 변경되었습니다.");
         const c = await getClient();
-        const { error } = await c.from(TABLE).upsert({ user_id: userId, k: fullKey, v: value });
+        const { error } = await c.from(TABLE).upsert({ user_id: owner, k: fullKey, v: value });
         if (error) throw error;
       });
     },
     delete(fullKey) {
       cache.delete(fullKey);
-      enqueue(async () => {
-        if (!userId) return;
+      const owner = userId;
+      enqueue(fullKey, async () => {
+        if (!owner || owner !== userId) throw new Error("저장할 로그인 세션이 변경되었습니다.");
         const c = await getClient();
-        const { error } = await c.from(TABLE).delete().eq("user_id", userId).eq("k", fullKey);
+        const { error } = await c.from(TABLE).delete().eq("user_id", owner).eq("k", fullKey);
         if (error) throw error;
       });
     },
@@ -88,7 +108,21 @@ export function createSupabaseDriver(url, anonKey) {
     },
 
     async flush() {
-      return writeChain;
+      await writeChain;
+      if (failures.size) throw new Error("서버 저장에 실패했습니다. 연결을 확인하고 다시 시도하세요.");
+    },
+
+    writeStatus,
+    onWriteStatus(listener) {
+      listeners.add(listener);
+      listener(writeStatus());
+      return () => listeners.delete(listener);
+    },
+    async retryWrites() {
+      // 진행 중인 새 값이 성공했다면 오래된 실패 값을 다시 쓰지 않는다.
+      await writeChain;
+      for (const [key, { fn }] of failures) enqueue(key, fn);
+      await this.flush();
     },
 
     auth: {
