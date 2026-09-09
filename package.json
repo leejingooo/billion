@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "gate": "node src/ci/run-gate.mjs",
+    "test:storage": "node --experimental-vm-modules --test tests/storage.test.mjs",
     "build": "node src/ci/run-gate.mjs && vite build",
     "preview": "vite preview"
   },

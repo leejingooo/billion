@@ -57,7 +57,7 @@ export default function Root() {
     return (
       <>
         <App />
-        {isServerConfigured && <SignOutButton />}
+        {isServerConfigured && <><SaveStatus /><SignOutButton /></>}
       </>
     );
   }
@@ -102,15 +102,36 @@ export default function Root() {
 }
 
 function SignOutButton() {
+  const [error, setError] = useState("");
   const out = async () => {
-    try { await getDriver().auth.signOut(); } catch {}
+    try {
+      await getDriver().flush();
+      await getDriver().auth.signOut();
+    } catch (e) { setError(msg(e)); return; }
     location.reload();
   };
   return (
+    <>
+    {error && <p role="alert" className="fixed bottom-12 right-3 z-30 max-w-xs text-xs text-red-300 bg-zinc-950 p-2">{error}</p>}
     <button onClick={out} title="로그아웃"
       className="fixed bottom-3 right-3 z-30 px-2.5 py-1.5 text-[11px] rounded-lg border border-zinc-700 bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 backdrop-blur">
       로그아웃
     </button>
+    </>
+  );
+}
+
+function SaveStatus() {
+  const [status, setStatus] = useState(() => getDriver().writeStatus());
+  useEffect(() => getDriver().onWriteStatus(setStatus), []);
+  if (!status.failed && !status.pending) return null;
+  return (
+    <div role="status" className="fixed bottom-3 left-3 z-30 max-w-sm rounded-lg border border-zinc-700 bg-zinc-950 p-3 text-xs text-zinc-200">
+      {status.failed ? "서버에 저장하지 못한 변경이 있습니다. 이 화면에서 다시 시도하세요." : "서버에 저장 중…"}
+      {status.failed > 0 && <button disabled={status.pending > 0}
+        onClick={() => getDriver().retryWrites().catch(() => {})}
+        className="ml-2 text-amber-400 disabled:opacity-50">저장 재시도</button>}
+    </div>
   );
 }
 
