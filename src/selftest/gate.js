@@ -94,6 +94,22 @@ export function runGate() {
   const invEnd = 21500 + 0 * 0 - 1500;
   add("무한·invested 항등식 (복리 후 원금보존)", eq(invEnd, 20000), invEnd, 20000);
 
+  // 초기 보유분도 전체 평단에 포함한다.
+  const initialHolding = accountingFromFills([
+    { side: "buy", qty: 10, price: 80 },
+    { side: "buy", qty: 5, price: 60 },
+  ]);
+  add("VR·초기 보유 포함 평단", eq(initialHolding.avgCost, 1100 / 15), initialHolding.avgCost, 1100 / 15);
+  const reconciled = accountingFromFills([
+    { side: "buy", qty: 2, price: 60 },
+    { side: "sell", qty: 1, price: 70 },
+    { side: "balance", qty: 7, costBasis: 543.21 },
+  ]);
+  add("VR·증권사 매입금액 보정", reconciled.heldQty === 7 && eq(reconciled.avgCost, 543.21 / 7), reconciled.avgCost, 543.21 / 7);
+  add("VR·잔고 보정 시 실현손익 보존", eq(reconciled.realized, 10), reconciled.realized, 10);
+  const empty = accountingFromFills([{ side: "buy", qty: 0, price: 100 }]);
+  add("VR·초기 0주 보존", empty.heldQty === 0, empty.heldQty, 0);
+
   const allPass = r.every((x) => x.pass);
   return { allPass, results: r };
 }
