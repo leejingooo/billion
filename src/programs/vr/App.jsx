@@ -9,7 +9,7 @@ import { accountingFromFills } from "../../overlay/ledger";
        r2 / buildBuyLadder / buildSellLadder / initState / advanceCycle / runSelfTests
    - 컴포넌트에만 추가:
        (1) 영속성: window.storage(계좌인지 어댑터)로 state/hist/px/설정/원장 저장·복원
-       (2) 체결 캡처: 엔진이 계산한 사다리 가격을 그대로 체결로 확정(rung 기반) → 정확한 평단/실현
+       (2) 체결 캡처: 사다리는 주문 한도, 실제 LOC 체결가로 잔고·원장 반영
        (3) 원장(ledger): 통합뷰 회계 오버레이용. read-only. 주문 로직엔 피드백 안 함.
    ========================================================================= */
 
@@ -161,8 +161,12 @@ export default function VR5Tool() {
     if (!p || p <= 0 || !capital) return;
     const s = initState(Number(capital), Number(poolFrac), p, params);
     setState(s); setHist([]); setPx(String(p));
-    setLedger([]); setInvested(Number(capital));   // 초기 투입원금
+    setLedger([{ side: "buy", qty: s.shares, price: p }]); setInvested(Number(capital));   // 초기 투입원금
     setNBuy(""); setNSell(""); setTouchedFill(false);
+  }
+
+  function checkpoint() {
+    return { ...state, accounting: { ledger, invested } };
   }
 
   function syncParams() {
@@ -172,7 +176,7 @@ export default function VR5Tool() {
 
   function nextCycle() {
     if (!state) return;
-    setHist([...hist, state]);
+    setHist([...hist, checkpoint()]);
     const ns = advanceCycle({ ...state, ...params });
     setState(ns);
     setInvested((v) => r2(v + Number(deposit)));   // 적립금 = 외부 투입원금
@@ -182,8 +186,15 @@ export default function VR5Tool() {
   function undo() {
     if (!hist.length) return;
     const prev = hist[hist.length - 1];
+    if (!prev.accounting) {
+      window.alert("이전 버전의 이력에는 원장·투입원금이 없어 안전하게 되돌릴 수 없습니다. 증권사 잔고 보정을 사용하세요.");
+      return;
+    }
+    const { accounting, ...previousState } = prev;
     setHist(hist.slice(0, -1));
-    setState(prev);
+    setState(previousState);
+    setLedger(accounting.ledger);
+    setInvested(accounting.invested);
     setNBuy(""); setNSell(""); setTouchedFill(false);
   }
 
@@ -215,7 +226,7 @@ export default function VR5Tool() {
     return { minBand, maxBand, buy, sell, price, evalNow, pv, status, buyHit, sellHit };
   }, [state, px]);
 
-  // 체결 캡처 적용 (rung 기반): 엔진이 계산한 가격을 그대로 체결로 확정 → 원장 기록
+  // 주문 한도와 실제 LOC 체결가격을 구분한다.
   const effBuy = touchedFill ? Math.max(0, parseInt(nBuy) || 0) : (view?.buyHit || 0);
   const effSell = touchedFill ? Math.max(0, parseInt(nSell) || 0) : (view?.sellHit || 0);
 
@@ -225,33 +236,62 @@ export default function VR5Tool() {
     const soldRows = view.sell.slice(0, Math.min(effSell, view.sell.length));
     if (boughtRows.length === 0 && soldRows.length === 0) return;
 
-    const buyCost = boughtRows.reduce((a, r) => a + r.price, 0);
-    const sellGet = soldRows.reduce((a, r) => a + r.price, 0);
+    const fillPrice = Number(px);
+    if (!Number.isFinite(fillPrice) || fillPrice <= 0) {
+      window.alert("실제 LOC 체결가(종가)를 입력하세요.");
+      return;
+    }
+    if (effBuy > view.buy.length || effSell > view.sell.length || (effBuy > 0 && effSell > 0)) {
+      window.alert("체결 수량을 확인하세요. 사다리 범위를 벗어나거나 매수·매도를 동시에 기록할 수 없습니다.");
+      return;
+    }
+    const buyCost = r2(boughtRows.length * fillPrice);
+    const sellGet = r2(soldRows.length * fillPrice);
+    if (buyCost > state.pool) {
+      window.alert("매수 금액이 Pool을 초과합니다. 실제 잔고와 체결 수량을 확인하세요.");
+      return;
+    }
     const newShares = state.shares + boughtRows.length - soldRows.length;
     const newPool = r2(state.pool - buyCost + sellGet);
 
     const fills = [
-      ...boughtRows.map((r) => ({ side: "buy", qty: 1, price: r.price })),
-      ...soldRows.map((r) => ({ side: "sell", qty: 1, price: r.price })),
+      ...(boughtRows.length ? [{ side: "buy", qty: boughtRows.length, price: fillPrice }] : []),
+      ...(soldRows.length ? [{ side: "sell", qty: soldRows.length, price: fillPrice }] : []),
     ];
 
-    setHist([...hist, state]);
+    setHist([...hist, checkpoint()]);
     setState({ ...state, shares: Math.max(0, newShares), pool: newPool });
     setLedger([...ledger, ...fills]);
     setNBuy(""); setNSell(""); setTouchedFill(false);
   }
 
-  // 안전 해치: 증권사 체결오차/액면병합 시 보유·Pool 절대값 보정 (원장 미기록 → 평단 추정에 미세영향 가능)
+  // 증권사 잔고를 기준으로 보정하되 기존 체결원장은 보존한다.
   const [reconShares, setReconShares] = useState("");
   const [reconPool, setReconPool] = useState("");
+  const [reconCost, setReconCost] = useState("");
+  const [reconInvested, setReconInvested] = useState("");
   const [reconOpen, setReconOpen] = useState(false);
   function applyRecon() {
     if (!state) return;
-    const sh = reconShares === "" ? state.shares : Math.max(0, Math.round(Number(reconShares)));
+    const sh = reconShares === "" ? state.shares : Number(reconShares);
     const pl = reconPool === "" ? state.pool : r2(Number(reconPool));
-    setHist([...hist, state]);
+    const cost = reconCost === "" ? null : Number(reconCost);
+    const inv = reconInvested === "" ? invested : Number(reconInvested);
+    if (!Number.isSafeInteger(sh) || sh < 0 || !Number.isFinite(pl) || pl < 0 ||
+        !Number.isFinite(inv) || inv < 0 ||
+        (cost !== null && (!Number.isFinite(cost) || cost < 0 || (sh === 0 && cost !== 0)))) {
+      window.alert("보유 수량은 0 이상의 정수, 금액은 0 이상의 유한한 숫자로 입력하세요.");
+      return;
+    }
+    if (cost === null && (sh !== state.shares || acct.heldQty !== sh)) {
+      window.alert("보유 수량 또는 원장이 다릅니다. 증권사의 매입금액(외화)을 함께 입력하세요.");
+      return;
+    }
+    setHist([...hist, checkpoint()]);
     setState({ ...state, shares: sh, pool: pl });
-    setReconShares(""); setReconPool(""); setReconOpen(false);
+    if (cost !== null) setLedger([...ledger, { side: "balance", qty: sh, costBasis: r2(cost) }]);
+    setInvested(r2(inv));
+    setReconShares(""); setReconPool(""); setReconCost(""); setReconInvested(""); setReconOpen(false);
   }
 
   // 오버레이 회계 (이동평균, 표시용)
@@ -366,6 +406,7 @@ export default function VR5Tool() {
                 <Stat label="총수익률" v={invested>0 && view.evalNow!=null ? (((view.evalNow+state.pool-invested)/invested)*100).toFixed(1)+"%" : "—"} small
                   tone={view.evalNow!=null && (view.evalNow+state.pool-invested)>=0?"red":"blue"} />
               </div>
+              {acct.heldQty !== state.shares && <p className="mt-2 text-xs text-amber-400">보유 수량과 회계 원장이 다릅니다 (잔고 {state.shares}주 / 원장 {acct.heldQty}주). 아래 증권사 잔고 보정에서 매입금액을 입력하세요.</p>}
               <div className="mt-1 text-[10px] text-zinc-500">※ 평단/실현은 체결 기록 기반의 <b>관찰용 회계</b>일 뿐, VR 주문(밴드)에는 영향을 주지 않음 (원문: VR은 평단과 무관하게 매도).</div>
               <div className="mt-3 flex items-center gap-2">
                 <span className={L}>현재가(종가)</span>
@@ -399,7 +440,7 @@ export default function VR5Tool() {
             {/* 체결 캡처 + 사이클 진행 */}
             <div className={`${card} p-4 mb-4`}>
               <div className="text-sm font-semibold mb-1">체결 반영</div>
-              <p className="text-xs text-zinc-500 mb-3">종가를 입력하면 체결권에 든 사다리 행 수가 자동 계산됩니다. 실제 체결과 다르면 수만 고치세요. 확정 시 <b>그 행들의 정확한 가격</b>으로 평단/실현이 기록됩니다.</p>
+              <p className="text-xs text-zinc-500 mb-3">실제 LOC 체결가(종가)를 입력하고 체결 수량을 확인하세요. 확정 시 <b>입력한 체결가</b>로 Pool·평단·실현손익을 기록합니다. 수수료 등 잔고 차이는 증권사 잔고 보정으로 반영하세요.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                 <label className="block"><span className={L}>체결된 매수 주수</span>
                   <input className={inp} type="number" min="0" value={touchedFill ? nBuy : effBuy}
@@ -414,9 +455,9 @@ export default function VR5Tool() {
               </div>
               {(effBuy>0 || effSell>0) && (
                 <div className="mt-2 text-xs text-zinc-500">
-                  확정 시: {effBuy>0 && <span className="text-red-400">매수 {effBuy}주 (−{usd(view.buy.slice(0,effBuy).reduce((a,r)=>a+r.price,0))})</span>}
+                  확정 시: {effBuy>0 && <span className="text-red-400">매수 {effBuy}주 (−{usd(effBuy * (Number(px) || 0))})</span>}
                   {effBuy>0 && effSell>0 && " · "}
-                  {effSell>0 && <span className="text-blue-400">매도 {effSell}주 (+{usd(view.sell.slice(0,effSell).reduce((a,r)=>a+r.price,0))})</span>}
+                  {effSell>0 && <span className="text-blue-400">매도 {effSell}주 (+{usd(effSell * (Number(px) || 0))})</span>}
                 </div>
               )}
 
@@ -429,15 +470,19 @@ export default function VR5Tool() {
 
               {/* 안전 해치 */}
               <div className="mt-3">
-                <button onClick={()=>setReconOpen(!reconOpen)} className="text-xs text-zinc-500 hover:text-zinc-300">⚙ 보유·Pool 직접 보정 (증권사 오차·액면병합 시) {reconOpen?"▲":"▼"}</button>
+                <button onClick={()=>setReconOpen(!reconOpen)} className="text-xs text-zinc-500 hover:text-zinc-300">⚙ 증권사 잔고·매입금액 보정 {reconOpen?"▲":"▼"}</button>
                 {reconOpen && (
                   <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
                     <label className="block"><span className={L}>보유 수량 (현재 {f0(state.shares)})</span>
                       <input className={inp} type="number" value={reconShares} onChange={(e)=>setReconShares(e.target.value)} placeholder="변경 시만" /></label>
                     <label className="block"><span className={L}>Pool (현재 {usd(state.pool)})</span>
                       <input className={inp} type="number" value={reconPool} onChange={(e)=>setReconPool(e.target.value)} placeholder="변경 시만" /></label>
+                    <label className="block"><span className={L}>매입금액 (외화 $ · 평단 × 보유수량)</span>
+                      <input className={inp} type="number" min="0" step="0.01" value={reconCost} onChange={(e)=>setReconCost(e.target.value)} placeholder="증권사 매입금액" /></label>
+                    <label className="block"><span className={L}>실제 누적 투입원금 ($ · 선택)</span>
+                      <input className={inp} type="number" min="0" step="0.01" value={reconInvested} onChange={(e)=>setReconInvested(e.target.value)} placeholder="입출금 내역 확인 후 입력" /></label>
                     <button onClick={applyRecon} className="rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 px-4 py-2 text-sm font-medium">보정 적용</button>
-                    <p className="sm:col-span-3 text-[10px] text-amber-400/80">※ 보정은 체결로 기록되지 않아 평단/실현 추정이 미세하게 어긋날 수 있음 (드물게만 사용).</p>
+                    <p className="sm:col-span-3 text-[10px] text-amber-400/80">※ 매입금액 입력 시 평단을 맞추는 잔고 보정 기록을 추가합니다. 기존 원장·실현손익·V·사이클은 보존합니다. 투입원금은 잔고가 아닌 실제 누적 입출금으로 확인하세요.</p>
                   </div>
                 )}
               </div>
