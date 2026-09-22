@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { listAccounts, deleteAccount, renameAccount, PROGRAM_LABELS } from "../storage/accounts";
 import { buildSnapshot, portfolioTotals } from "../overlay/snapshot";
+import AssetHistory from "./AssetHistory";
 
 const usd = (x) => (x == null || isNaN(x) ? "—" : "$" + Number(x).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 const pct = (x) => (x == null || isNaN(x) ? "—" : (x >= 0 ? "+" : "") + x.toFixed(1) + "%");
@@ -58,6 +59,8 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
           <Cell k="실현수익률" v={pct(totals.realizedReturnPct)} tone={totals.realizedReturnPct} />
           <Cell k="총수익률" v={pct(totals.totalReturnPct)} tone={totals.totalReturnPct} big />
         </div>
+
+        <AssetHistory snaps={snaps} />
 
         {accounts.length === 0 ? (
           <div className="border border-zinc-800 rounded-xl px-4 py-10 text-center text-sm text-zinc-500">
