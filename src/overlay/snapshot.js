@@ -92,7 +92,7 @@ function vrSnap(acct, priceMap) {
     realized,
     realizedReturnPct: invested > 0 ? (realized / invested) * 100 : null,
     totalReturnPct: invested > 0 ? ((marketValue + cash - invested) / invested) * 100 : null,
-    extra: { V: st.V, pv: st.V ? (st.pool / st.V) * 100 : null, cycle: st.cycle, priceUsed: price != null ? price : (b.px ? Number(b.px) : null), priceIsLive: price != null },
+    extra: { V: st.V, band: st.band, pv: st.V ? (st.pool / st.V) * 100 : null, cycle: st.cycle, priceUsed: price != null ? price : (b.px ? Number(b.px) : null), priceIsLive: price != null },
   };
 }
 
