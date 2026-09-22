@@ -1,3 +1,5 @@
+import { vrPoint } from "./strategy.js";
+
 export const HISTORY_KEY = "asset_history_v1";
 
 export function localDate(now = new Date()) {
@@ -22,7 +24,8 @@ export function makeRecord(snap, now = new Date()) {
   }
   return { date: localDate(now), savedAt: now.toISOString(), assets: snap.cash + snap.marketValue,
     invested: snap.invested, price: snap.extra?.priceUsed ?? null,
-    priceSource: snap.extra?.priceIsLive ? "입력 현재가" : "저장 종가" };
+    priceSource: snap.extra?.priceIsLive ? "입력 현재가" : "저장 종가",
+    ...(snap.extra?.V != null ? { vr: vrPoint({ ...snap.extra, pool: snap.cash }, snap.marketValue) } : {}) };
 }
 
 export function upsertRecord(rows, record) {

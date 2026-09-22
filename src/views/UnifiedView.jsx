@@ -60,7 +60,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
           <Cell k="총수익률" v={pct(totals.totalReturnPct)} tone={totals.totalReturnPct} big />
         </div>
 
-        <AssetHistory snaps={snaps} />
+        <AssetHistory snaps={snaps} accounts={accounts} />
 
         {accounts.length === 0 ? (
           <div className="border border-zinc-800 rounded-xl px-4 py-10 text-center text-sm text-zinc-500">

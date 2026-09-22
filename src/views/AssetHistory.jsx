@@ -1,12 +1,13 @@
 import { useMemo, useState } from "react";
 import { rawGet, rawSet } from "../storage/adapter";
 import { HISTORY_KEY, readHistory, makeRecord, upsertRecord, aggregateHistory, filterPeriod } from "../overlay/history";
+import StrategyHistory from "./StrategyHistory";
 
 const money = (n) => n == null ? "—" : n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const tone = (n) => n == null ? "text-zinc-100" : n >= 0 ? "text-red-400" : "text-blue-400";
 const periods = [[30, "1개월"], [90, "3개월"], [365, "1년"], [0, "전체"]];
 
-export default function AssetHistory({ snaps }) {
+export default function AssetHistory({ snaps, accounts = [] }) {
   const [account, setAccount] = useState("all");
   const [days, setDays] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -80,6 +81,9 @@ export default function AssetHistory({ snaps }) {
         <p>투입원금은 앱에 저장된 회계 기준입니다. 실제 증권사 손익과 다를 수 있으며, 자산 증감에는 입출금도 포함됩니다.</p>
       </div>
       {message && <p role="status" className="mt-3 text-xs text-amber-300">{message}</p>}
+      {selected !== "all" && accounts.find((a) => a.id === selected) && <StrategyHistory key={selected}
+        account={accounts.find((a) => a.id === selected)} snap={started.find((s) => s.id === selected)} daily={history.byId[selected] || []} days={days} />}
+      {selected === "all" && started.length > 0 && <p className="mt-4 text-xs text-amber-300">개별 계좌를 선택하면 VR 밴드 또는 무한매수법의 단순 보유 비교가 표시됩니다.</p>}
     </section>
   );
 }
