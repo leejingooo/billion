@@ -14,6 +14,7 @@ export default function AssetHistory({ snaps, accounts = [] }) {
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
   const started = snaps.filter((s) => s.started);
+  const active = started.filter((s) => !s.archived);
   const selected = started.some((s) => s.id === account) ? account : "all";
   const history = useMemo(() => {
     try {
@@ -21,7 +22,7 @@ export default function AssetHistory({ snaps, accounts = [] }) {
     } catch (e) { return { byId: {}, error: e.message }; }
   }, [snaps, revision]);
   const allRows = selected === "all"
-    ? aggregateHistory(started.map((s) => history.byId[s.id] || []))
+    ? aggregateHistory(active.map((s) => history.byId[s.id] || []))
     : history.byId[selected] || [];
   const rows = filterPeriod(allRows, days);
   const first = rows[0];
@@ -34,7 +35,7 @@ export default function AssetHistory({ snaps, accounts = [] }) {
     try {
       const now = new Date();
       // 모든 계좌 검증을 마친 뒤 쓰기 시작해 잘못된 가격으로 일부만 저장하지 않는다.
-      const pending = started.map((s) => ({ id: s.id, record: makeRecord(s, now), rows: readHistory(rawGet(s.id, HISTORY_KEY)) }));
+      const pending = active.map((s) => ({ id: s.id, record: makeRecord(s, now), rows: readHistory(rawGet(s.id, HISTORY_KEY)) }));
       pending.forEach(({ id, rows: previous, record }) => rawSet(id, HISTORY_KEY, JSON.stringify(upsertRecord(previous, record))));
       setRevision((r) => r + 1);
       setMessage(`오늘 ${pending.length}개 계좌 기록을 반영했습니다. 같은 날짜는 최신 값으로 갱신됩니다.`);
@@ -50,14 +51,14 @@ export default function AssetHistory({ snaps, accounts = [] }) {
           <h3 id="asset-history-title" className="text-lg font-bold">자산 성장</h3>
           <p className="mt-1 text-xs text-zinc-400">평가금 + 잔금의 변화와 투입원금을 함께 확인하세요. USD 기준.</p>
         </div>
-        <button onClick={save} disabled={!started.length || saving || !!history.error}
+        <button onClick={save} disabled={!active.length || saving || !!history.error}
           className="rounded-lg bg-amber-400 px-3 py-2 text-xs font-semibold text-zinc-950 hover:bg-amber-300 disabled:opacity-40">오늘 기록 저장</button>
       </div>
       <div className="my-5 flex flex-wrap items-center justify-between gap-3">
         <select aria-label="그래프 계좌" value={selected} onChange={(e) => setAccount(e.target.value)}
           className="max-w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-zinc-100">
-          <option value="all">총자산 · 전체 계좌</option>
-          {started.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+          <option value="all">총자산 · 운용 계좌</option>
+          {started.map((s) => <option key={s.id} value={s.id}>{s.label}{s.archived ? " (보관)" : ""}</option>)}
         </select>
         <div className="flex gap-1" aria-label="그래프 기간">
           {periods.map(([value, label]) => <button key={value} aria-pressed={days === value} onClick={() => setDays(value)}
@@ -77,7 +78,7 @@ export default function AssetHistory({ snaps, accounts = [] }) {
       )}
       <div className="mt-4 space-y-1 text-[11px] leading-relaxed text-zinc-500">
         <p>기록은 기기의 날짜 기준 하루 1개이며 저장 버튼을 누른 시점의 값입니다. 현재가 미입력 시 저장된 종가를 사용합니다. 과거 데이터와 미접속일은 자동 생성하지 않습니다.</p>
-        <p>총자산은 현재 시작된 계좌 모두가 기록된 날짜만 표시합니다. 계좌 추가·삭제로 조회 범위가 달라지며, 삭제한 계좌의 기록도 함께 삭제됩니다.</p>
+        <p>총자산은 현재 운용 중인 계좌 모두가 기록된 날짜만 표시합니다. 보관 계좌는 합계와 오늘 기록 저장에서 제외되며 개별 기록은 조회할 수 있습니다. 계좌 추가·보관·복원·삭제로 과거 합계의 조회 범위도 달라지며, 삭제한 계좌의 기록도 함께 삭제됩니다.</p>
         <p>투입원금은 앱에 저장된 회계 기준입니다. 실제 증권사 손익과 다를 수 있으며, 자산 증감에는 입출금도 포함됩니다.</p>
       </div>
       {message && <p role="status" className="mt-3 text-xs text-amber-300">{message}</p>}

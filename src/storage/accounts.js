@@ -65,3 +65,7 @@ export function deleteAccount(id) {
 export function getAccount(id) {
   return listAccounts().find((a) => a.id === id) || null;
 }
+
+export function setAccountArchived(id, archived) {
+  saveIndex(listAccounts().map((a) => a.id === id ? { ...a, archived: Boolean(archived) } : a));
+}

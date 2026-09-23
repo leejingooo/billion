@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from "react";
 import { listAccounts, createAccount, PROGRAM_LABELS, PROGRAM_SHORT } from "./storage/accounts";
-import { setActiveAccount } from "./storage/adapter";
+import { setActiveAccount, ACCOUNT_STATE_EVENT } from "./storage/adapter";
 import { getDriver } from "./storage/backend";
 import { runGate } from "./selftest/gate";
+import CycleFunding from "./views/CycleFunding";
 import UnifiedView from "./views/UnifiedView";
 import MubaeSingle from "./programs/mubaeSingle/App";
 import MubaeMulti from "./programs/mubaeMulti/App";
@@ -21,9 +22,15 @@ const PRICE_KEY = "ui:prices";
 
 // 활성 계좌를 자식 effect 이전에 동기 확정한 뒤 프로그램을 마운트(remount=key).
 function ProgramHost({ acct }) {
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const update = (e) => { if (e.detail.accountId === acct.id && e.detail.reload) setRevision((n) => n + 1); };
+    window.addEventListener(ACCOUNT_STATE_EVENT, update);
+    return () => window.removeEventListener(ACCOUNT_STATE_EVENT, update);
+  }, [acct.id]);
   setActiveAccount(acct.id);
   const Comp = PROGRAMS[acct.programType];
-  return <Comp key={acct.id} />;
+  return <><CycleFunding key={acct.id} acct={acct} onReload={() => setRevision((n) => n + 1)} /><Comp key={`${acct.id}:${revision}`} /></>;
 }
 
 export default function App() {
@@ -110,7 +117,7 @@ export default function App() {
 // 계좌 생성 시 변형을 선택하고, 계좌 버튼에 변형 배지를 붙여 구분한다.
 function ProgramSection({ tabKey, types, selectedId, onSelect, onChange }) {
   const multi = types.length > 1;
-  const inTypes = (a) => types.includes(a.programType);
+  const inTypes = (a) => types.includes(a.programType) && !a.archived;
   const [accounts, setAccounts] = useState(() => listAccounts().filter(inTypes));
   const [newLabel, setNewLabel] = useState("");
   const [variant, setVariant] = useState(types[0]);

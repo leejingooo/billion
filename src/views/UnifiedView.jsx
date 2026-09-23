@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { listAccounts, deleteAccount, renameAccount, PROGRAM_LABELS } from "../storage/accounts";
+import { listAccounts, deleteAccount, renameAccount, setAccountArchived, PROGRAM_LABELS } from "../storage/accounts";
 import { buildSnapshot, portfolioTotals } from "../overlay/snapshot";
 import AssetHistory from "./AssetHistory";
 
@@ -11,7 +11,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
   const accounts = useMemo(() => listAccounts(), [tick]);
   const snaps = useMemo(() => accounts.map((a) => buildSnapshot(a, priceMap)), [accounts, priceMap, tick]);
   const totals = useMemo(() => portfolioTotals(snaps), [snaps]);
-  const started = snaps.filter((s) => s.started);
+  const started = snaps.filter((s) => s.started && !s.archived);
   const [managing, setManaging] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editLabel, setEditLabel] = useState("");
@@ -35,7 +35,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
         <div className="flex flex-wrap items-end justify-between gap-3 mb-5">
           <div>
             <h2 className="text-xl font-extrabold tracking-tight">통합뷰</h2>
-            <p className="text-xs text-zinc-500 mt-0.5">모든 계좌 · 평가는 아래 종목별 현재가 기준 (종가 운용과 일치). 관찰 전용 — 주문에 영향 없음.</p>
+            <p className="text-xs text-zinc-500 mt-0.5">운용 계좌 합계 (보관 제외) · 평가는 아래 종목별 현재가 기준 (종가 운용과 일치). 관찰 전용 — 주문에 영향 없음.</p>
           </div>
           <div className="flex items-end gap-3">
             {["TQQQ", "SOXL"].map((t) => (
@@ -87,7 +87,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
                 {snaps.map((s) => (
                   <tr key={s.id} className="border-b border-zinc-800/60 last:border-0">
                     <td className="px-3 py-2.5 font-sans">
-                      <div className="text-zinc-200">{s.label}</div>
+                      <div className="text-zinc-200">{s.label}{s.archived && <span className="ml-2 text-xs text-amber-400">보관 · 합계 제외</span>}</div>
                       <div className="text-[10px] text-zinc-500">
                         {s.started ? statusLine(s) : "미시작"}
                         {s.started && s.extra && !s.extra.priceIsLive && <span className="text-amber-500/70"> · 전일종가</span>}
@@ -142,7 +142,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
                           onKeyDown={(e) => { if (e.key === "Enter") saveRename(a); if (e.key === "Escape") setEditingId(null); }}
                           className="w-full max-w-xs bg-zinc-900 border border-amber-400 rounded-lg px-2.5 py-1.5 text-sm text-zinc-100 outline-none" />
                       ) : (
-                        <div className="text-sm text-zinc-200 truncate">{a.label}</div>
+                        <div className="text-sm text-zinc-200 truncate">{a.label}{a.archived && " · 보관 중"}</div>
                       )}
                       <div className="text-[11px] text-zinc-500">{PROGRAM_LABELS[a.programType]}</div>
                     </div>
@@ -158,6 +158,8 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
                         <>
                           <button onClick={() => startRename(a)}
                             className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-300 hover:bg-zinc-800 whitespace-nowrap">이름 변경</button>
+                          <button onClick={() => { setAccountArchived(a.id, !a.archived); onChange?.(); }}
+                            className="px-3 py-1.5 text-xs rounded-lg border border-amber-800 text-amber-300 hover:bg-zinc-800 whitespace-nowrap">{a.archived ? "보관 해제" : "보관"}</button>
                           <button onClick={() => removeAccount(a)}
                             className="px-3 py-1.5 text-xs rounded-lg border border-red-900 text-red-400 hover:bg-red-950/40 whitespace-nowrap">삭제</button>
                         </>
@@ -165,7 +167,7 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
                     </div>
                   </div>
                 ))}
-                <p className="px-4 py-2.5 text-[11px] text-zinc-500">이름 변경은 즉시 저장됩니다. 삭제하면 해당 계좌의 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다. (삭제 전 확인 메시지가 표시됩니다.)</p>
+                <p className="px-4 py-2.5 text-[11px] text-zinc-500">보관하면 합계와 운용 목록에서 제외되며 기록은 유지됩니다. 보관 해제로 복원할 수 있습니다. 이름 변경은 즉시 저장됩니다. 삭제하면 해당 계좌의 진행상태·기록이 영구 삭제되며 되돌릴 수 없습니다. (삭제 전 확인 메시지가 표시됩니다.)</p>
               </div>
             )}
           </div>

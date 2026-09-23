@@ -23,6 +23,7 @@ export function mubaeCycles(state, fixedTicker = null) {
   if (!["SOXL", "TQQQ"].includes(ticker)) return [];
   const groups = new Map();
   for (const h of Array.isArray(state.history) ? state.history : []) {
+    if (h.kind === "funding") continue;
     const cycle = h.prevSnapshot?.cycle;
     if (!Number.isInteger(cycle)) continue;
     if (!groups.has(cycle)) groups.set(cycle, []);

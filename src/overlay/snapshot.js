@@ -27,7 +27,7 @@ function parse(raw) {
 
 function emptySnap(acct, ticker) {
   return {
-    id: acct.id, label: acct.label, ticker, started: false,
+    id: acct.id, label: acct.label, archived: Boolean(acct.archived), ticker, started: false,
     shares: 0, avgCost: 0, cash: 0,
     marketValue: 0, invested: 0, unrealized: 0,
     realized: 0, realizedReturnPct: null, totalReturnPct: null,
@@ -58,7 +58,7 @@ function mubaeSnap(acct, key, fixedTicker, priceMap) {
   const unrealized = marketValue - shares * avgCost;
 
   return {
-    id: acct.id, label: acct.label, ticker, started: true,
+    id: acct.id, label: acct.label, archived: Boolean(acct.archived), ticker, started: true,
     shares, avgCost, cash,
     marketValue, invested, unrealized,
     realized,
@@ -86,7 +86,7 @@ function vrSnap(acct, priceMap) {
   const unrealized = marketValue - shares * avgCost;
 
   return {
-    id: acct.id, label: acct.label, ticker, started: true,
+    id: acct.id, label: acct.label, archived: Boolean(acct.archived), ticker, started: true,
     shares, avgCost, cash,
     marketValue, invested, unrealized,
     realized,
@@ -99,7 +99,7 @@ function vrSnap(acct, priceMap) {
 export function portfolioTotals(snaps) {
   const t = { marketValue: 0, cash: 0, invested: 0, unrealized: 0, realized: 0 };
   for (const s of snaps) {
-    if (!s.started) continue;
+    if (!s.started || s.archived) continue;
     t.marketValue += s.marketValue;
     t.cash += s.cash;
     t.invested += s.invested;
