@@ -166,11 +166,12 @@ export default function VR5Tool() {
   }
 
   function checkpoint() {
-    return { ...state, accounting: { ledger, invested } };
+    return { ...state, accounting: { ledger, invested }, undoContext: { px } };
   }
 
   function syncParams() {
     if (!state) return;
+    setHist([...hist, checkpoint()]);
     setState({ ...state, ...params });
   }
 
@@ -190,9 +191,12 @@ export default function VR5Tool() {
       window.alert("이전 버전의 이력에는 원장·투입원금이 없어 안전하게 되돌릴 수 없습니다. 증권사 잔고 보정을 사용하세요.");
       return;
     }
-    const { accounting, ...previousState } = prev;
+    const { accounting, undoContext, ...previousState } = prev;
     setHist(hist.slice(0, -1));
     setState(previousState);
+    setG(previousState.G); setBand(previousState.band);
+    setUsage(previousState.usage); setDeposit(previousState.deposit);
+    if (undoContext?.px != null) setPx(undoContext.px);
     setLedger(accounting.ledger);
     setInvested(accounting.invested);
     setNBuy(""); setNSell(""); setTouchedFill(false);

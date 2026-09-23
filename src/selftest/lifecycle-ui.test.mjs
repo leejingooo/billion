@@ -1,0 +1,81 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import React from "react";
+import { create, act } from "react-test-renderer";
+import { createServer } from "vite";
+import { MUBAE_KEYS } from "../features/cycleFunding.js";
+
+const text = (node) => typeof node === "string" ? node : (node.children || []).map(text).join("");
+test("React 화면: 입금 되돌리기·수동 보정 remount·보관/복원·기록 합계 제외", async () => {
+  const values = new Map();
+  const win = new EventTarget();
+  win.localStorage = { getItem: (k) => values.get(k) ?? null, setItem: (k,v) => values.set(k,v), removeItem: (k) => values.delete(k), key: (i) => [...values.keys()][i], get length() { return values.size; } };
+  globalThis.window = win;
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: "custom" });
+  let tree;
+  try {
+    const { default: App } = await server.ssrLoadModule("/src/App.jsx");
+    const { createAccount, listAccounts } = await server.ssrLoadModule("/src/storage/accounts.js");
+    const { rawSet, rawGet, installStorageAdapter } = await server.ssrLoadModule("/src/storage/adapter.js");
+    installStorageAdapter();
+    const a = createAccount("mubaeSingle", "테스트 계좌 A");
+    const b = createAccount("mubaeMulti", "테스트 계좌 B");
+    const st = { initialized: true, principal: 1100, cash: 1100, shares: 0, avg: 0, T: 0, mode: "general", revFirst: false, cycle: 2, realizedTotal: 100, cycleStartCash: 1100, closes: [60], lastClose: 60, bigPct: 10,
+      history: [{ date: "2026-09-22", close: 60, buys: [], sells: [], after: { cash:1100, shares:0 }, prevSnapshot: { cycle: 1, shares:10 } }] };
+    rawSet(a.id, MUBAE_KEYS.mubaeSingle, JSON.stringify(st));
+    rawSet(b.id, MUBAE_KEYS.mubaeMulti, JSON.stringify({ ...st, ticker: "SOXL", split: 20 }));
+    const history = JSON.stringify([{ date: "2026-09-22", assets: 1100, invested: 1000 }]);
+    for (const acct of [a,b]) rawSet(acct.id, "asset_history_v1", history);
+    await act(async () => { tree = create(React.createElement(App)); });
+    const buttons = () => tree.root.findAllByType("button");
+    const button = (label) => {
+      const found = buttons().filter((b) => text(b) === label);
+      assert.equal(found.length, 1, `button: ${label}`); return found[0];
+    };
+    const click = async (label) => act(async () => button(label).props.onClick());
+    await click("무한매수법");
+    const aButton = buttons().find((b) => text(b).startsWith(a.label));
+    await act(async () => aButton.props.onClick());
+    const fundingInput = () => tree.root.findAllByType("input").find((n) => n.props["aria-label"] === "추가 금액 (USD)");
+    assert.equal(fundingInput().props.disabled, false);
+    await act(async () => fundingInput().props.onChange({ target: { value: "200" } }));
+    await act(async () => tree.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+    assert.equal(JSON.parse(rawGet(a.id,MUBAE_KEYS.mubaeSingle)).cash,1300);
+    assert.ok(text(tree.root).includes("$1,300.00"));
+    assert.equal(JSON.parse(rawGet(b.id,MUBAE_KEYS.mubaeMulti)).cash,1100);
+    const settingButton = buttons().find((b) => text(b).includes("설정") && !text(b).includes("시작"));
+    await act(async () => settingButton.props.onClick());
+    await click("마지막 하루 기록 되돌리기");
+    assert.deepEqual(JSON.parse(rawGet(a.id,MUBAE_KEYS.mubaeSingle)),st);
+    await click("⚙ 상태 수동 보정 (액면병합·체결오차 누적 시) ▼");
+    const adjust = tree.root.findAllByType("input").filter((n) => n.props.placeholder === "변경 시만 입력");
+    await act(async () => adjust[0].props.onChange({ target: { value:"1250" } }));
+    await click("보정 적용");
+    assert.equal(JSON.parse(rawGet(a.id,MUBAE_KEYS.mubaeSingle)).history.at(-1).kind,"adjustment");
+    assert.ok(text(tree.root).includes("$1,250.00"));
+    await act(async () => buttons().find((b) => text(b).includes("설정")).props.onClick());
+    await click("마지막 하루 기록 되돌리기");
+    assert.deepEqual(JSON.parse(rawGet(a.id,MUBAE_KEYS.mubaeSingle)),st);
+    await click("통합뷰");
+    await click("계좌 관리 ▼");
+    await act(async () => buttons().filter((b) => text(b)==="보관")[0].props.onClick());
+    assert.equal(listAccounts().find((x) => x.id===a.id).archived,true);
+    const selects = tree.root.findAllByType("select");
+    assert.ok(selects.some((s) => text(s).includes("테스트 계좌 A (보관)")));
+    assert.ok(text(tree.root).includes("보관 · 합계 제외"));
+    const metrics = tree.root.findAll((n) => n.type === "div" && n.props.className === "rounded-xl bg-zinc-950/60 px-4 py-3");
+    assert.ok(text(metrics[0]).includes("$1,100.00"));
+    await click("오늘 기록 저장");
+    assert.equal(rawGet(a.id,"asset_history_v1"),history);
+    await click("무한매수법");
+    assert.ok(!buttons().some((b) => text(b).startsWith(a.label)));
+    await click("통합뷰"); await click("계좌 관리 ▼"); await click("보관 해제");
+    assert.equal(listAccounts().find((x) => x.id===a.id).archived,false);
+    assert.deepEqual(JSON.parse(rawGet(a.id,MUBAE_KEYS.mubaeSingle)),st);
+    await click("무한매수법");
+    assert.ok(buttons().some((b) => text(b).startsWith(a.label)));
+  } finally {
+    if(tree) await act(async () => tree.unmount());
+    await server.close(); delete globalThis.window;
+  }
+});

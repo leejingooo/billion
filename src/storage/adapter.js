@@ -11,6 +11,9 @@
    ============================================================ */
 
 import { getDriver } from "./backend";
+import { MUBAE_KEYS, captureManualAdjustment } from "../features/cycleFunding";
+
+export const ACCOUNT_STATE_EVENT = "account-state-changed";
 
 let _activeAccount = null;
 export function setActiveAccount(id) {
@@ -49,8 +52,25 @@ export function installStorageAdapter() {
   if (typeof window === "undefined") return;
   window.storage = {
     get: (key) => Promise.resolve(dGet(nsKey(key))),
-    set: (key, value) => Promise.resolve(dSet(nsKey(key), value)),
-    delete: (key) => Promise.resolve(dDel(nsKey(key))),
+    set: async (key, value) => {
+      const accountId = _activeAccount;
+      let reload = false;
+      if (Object.values(MUBAE_KEYS).includes(key)) {
+        const previous = JSON.parse(rawGet(accountId, key) || "null");
+        const next = JSON.parse(value);
+        const captured = captureManualAdjustment(previous, next);
+        reload = captured !== next;
+        value = JSON.stringify(captured);
+      }
+      const result = dSet(nsKey(key), value);
+      window.dispatchEvent(new CustomEvent(ACCOUNT_STATE_EVENT, { detail: { accountId, reload } }));
+      return result;
+    },
+    delete: async (key) => {
+      const result = dDel(nsKey(key));
+      window.dispatchEvent(new CustomEvent(ACCOUNT_STATE_EVENT, { detail: { accountId: _activeAccount } }));
+      return result;
+    },
     list: (prefix = "") => Promise.resolve(dList(`acct:${_activeAccount}:${prefix}`)),
   };
 }
