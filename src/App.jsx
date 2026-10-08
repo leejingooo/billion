@@ -8,12 +8,16 @@ import UnifiedView from "./views/UnifiedView";
 import MubaeSingle from "./programs/mubaeSingle/App";
 import MubaeMulti from "./programs/mubaeMulti/App";
 import VRTool from "./programs/vr/App";
+import TurnRepair from "./views/TurnRepair";
+import IndependentCapital from "./views/IndependentCapital";
+import CombinedOrders from "./views/CombinedOrders";
 
 const PROGRAMS = { mubaeSingle: MubaeSingle, mubaeMulti: MubaeMulti, vr: VRTool };
 // 무한매수법은 한 섹션 아래 두 변형(SOXL40 단일·멀티)을 함께 호스팅한다.
 // LOCKED 파일은 무수정 — 통합은 라우팅/호스트 레이어에서만 처리.
 const TABS = [
   { key: "unified", label: "통합뷰", types: null },
+  { key: "combined", label: "통합 주문", types: [] },
   { key: "mubae", label: "무한매수법", types: ["mubaeSingle", "mubaeMulti"] },
   { key: "vr", label: "VR 적립식", types: ["vr"] },
 ];
@@ -21,7 +25,7 @@ const TABS = [
 const PRICE_KEY = "ui:prices";
 
 // 활성 계좌를 자식 effect 이전에 동기 확정한 뒤 프로그램을 마운트(remount=key).
-function ProgramHost({ acct }) {
+function ProgramHost({ acct, onCreated }) {
   const [revision, setRevision] = useState(0);
   useEffect(() => {
     const update = (e) => { if (e.detail.accountId === acct.id && e.detail.reload) setRevision((n) => n + 1); };
@@ -30,7 +34,7 @@ function ProgramHost({ acct }) {
   }, [acct.id]);
   setActiveAccount(acct.id);
   const Comp = PROGRAMS[acct.programType];
-  return <><CycleFunding key={acct.id} acct={acct} onReload={() => setRevision((n) => n + 1)} /><Comp key={`${acct.id}:${revision}`} /></>;
+  return <><CycleFunding key={acct.id} acct={acct} onReload={() => setRevision((n) => n + 1)} /><TurnRepair key={`repair:${acct.id}`} acct={acct} onReload={() => setRevision(n=>n+1)} /><IndependentCapital key={`capital:${acct.id}`} acct={acct} onCreated={onCreated} /><Comp key={`${acct.id}:${revision}`} /></>;
 }
 
 export default function App() {
@@ -97,7 +101,7 @@ export default function App() {
         </div>
       </header>
 
-      {active.types === null ? (
+      {active.key === "combined" ? <CombinedOrders /> : active.types === null ? (
         <UnifiedView priceMap={priceMap} onPrice={onPrice} tick={tick} onChange={() => setTick((n) => n + 1)} />
       ) : (
         <ProgramSection
@@ -173,7 +177,7 @@ function ProgramSection({ tabKey, types, selectedId, onSelect, onChange }) {
 
       {/* 프로그램 본문 */}
       {acct ? (
-        <ProgramHost acct={acct} />
+        <ProgramHost acct={acct} onCreated={(id)=>{refresh();onSelect(id);}} />
       ) : (
         <div className="max-w-5xl mx-auto px-4 py-16 text-center text-sm text-zinc-500" style={{ fontFamily: "'Pretendard', -apple-system, sans-serif" }}>
           계좌를 선택하거나 새로 만들면 도구가 열립니다.
@@ -182,3 +186,4 @@ function ProgramSection({ tabKey, types, selectedId, onSelect, onChange }) {
     </div>
   );
 }
+

@@ -44,8 +44,9 @@ npm run build    # 게이트 먼저 실행 → 통과 시에만 dist/ 생성
 
 1. **무한매수법 두 파일은 바이트 그대로 보존.** 아래 승인 예외 외 수정 불가.
    - 2026-10-08 사용자 승인 예외: 전반전 T의 사다리 라벨 기반 판정을 정수 체결 수량 비교로 변경하고 불명확한 체결은 확인 후 저장한다. 사다리 가격·매도/리버스 공식·과거 계좌 데이터는 변경하지 않는다. 자세한 구현 판단은 `docs/mubae-turn-quantity.md` 참조.
-   - `src/programs/mubaeSingle/App.jsx` — sha256 `dc1933704cfae95a44a9936c4a678bf587e6569abdaff2eb90dfaf639010408e`
-   - `src/programs/mubaeMulti/App.jsx` — sha256 `068efd0e12b9b1ca6fba8c8cc34578b957006560a90f09443b710f838696eb1d`
+   - 2026-10-08 추가 사용자 요청: T 보정/독립 증액/통합 주문 기능에서 같은 엔진을 재사용하도록 `getOrders`, `buyTurnIncrement`를 named export로 공개한다. 매매 함수 본체 추가 변경 없음.
+   - `src/programs/mubaeSingle/App.jsx` — sha256 `bd9c3497ae37fbd38e32ff3753c107351ec170b48926379648227dfe62324d0c`
+   - `src/programs/mubaeMulti/App.jsx` — sha256 `28e842e86b3bbd60b977820a476bfa0631069e3ece49a3cee9100e8e4a01f209`
    - 계좌 격리·저장 방식 변경 등 모든 확장은 **전역 `window.storage` 어댑터 주입**(`src/storage/adapter.js`)으로만 처리한다.
    - 이 파일들을 건드려야만 해결되는 것처럼 보이는 요구가 오면, 수정하지 말고 어댑터/래퍼 레이어 해법을 제시하거나 사용자에게 보고한다.
    - 작업 후 `sha256sum`으로 두 파일의 해시가 위 값과 일치하는지 확인한다.
