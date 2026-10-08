@@ -1,6 +1,8 @@
 /* node CI 릴리스 게이트: npm run gate / npm run build 에서 먼저 실행.
    FAIL 이 하나라도 있으면 종료코드 1 → 빌드/배포 차단. */
 import { runGate } from "../selftest/gate.js";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const { allPass, results } = runGate();
 for (const r of results) {
@@ -13,4 +15,13 @@ if (!allPass) {
   console.error("릴리스 게이트 실패 — 배포 차단.");
   process.exit(1);
 }
+const regression = spawnSync(process.execPath, ["--test",
+  fileURLToPath(new URL("../selftest/mubae-turn.test.mjs", import.meta.url)),
+  fileURLToPath(new URL("../selftest/mubae-turn-ui.test.mjs", import.meta.url)),
+], { stdio: "inherit" });
+if (regression.error || regression.status !== 0) {
+  console.error("실제 엔진/체결 화면 검증 실패 — 배포 차단.");
+  process.exit(1);
+}
 console.log("릴리스 게이트 통과.");
+

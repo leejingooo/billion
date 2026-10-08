@@ -42,9 +42,10 @@ npm run build    # 게이트 먼저 실행 → 통과 시에만 dist/ 생성
 
 ### 절대 불변 원칙 (위반 금지 — 이 섹션이 이 문서에서 가장 중요하다)
 
-1. **무한매수법 두 파일은 바이트 그대로 보존.** 한 글자도 수정 불가.
-   - `src/programs/mubaeSingle/App.jsx` — sha256 `b9fc202cbb4a59146544e0c47dcf8f6db83e5c8d623ffe3b600ca1181f340caa`
-   - `src/programs/mubaeMulti/App.jsx` — sha256 `312bfbb7c855ec6dcae547c7538aa9ccc61e54fdd710217cc7f26c04b6dece2d`
+1. **무한매수법 두 파일은 바이트 그대로 보존.** 아래 승인 예외 외 수정 불가.
+   - 2026-10-08 사용자 승인 예외: 전반전 T의 사다리 라벨 기반 판정을 정수 체결 수량 비교로 변경하고 불명확한 체결은 확인 후 저장한다. 사다리 가격·매도/리버스 공식·과거 계좌 데이터는 변경하지 않는다. 자세한 구현 판단은 `docs/mubae-turn-quantity.md` 참조.
+   - `src/programs/mubaeSingle/App.jsx` — sha256 `dc1933704cfae95a44a9936c4a678bf587e6569abdaff2eb90dfaf639010408e`
+   - `src/programs/mubaeMulti/App.jsx` — sha256 `068efd0e12b9b1ca6fba8c8cc34578b957006560a90f09443b710f838696eb1d`
    - 계좌 격리·저장 방식 변경 등 모든 확장은 **전역 `window.storage` 어댑터 주입**(`src/storage/adapter.js`)으로만 처리한다.
    - 이 파일들을 건드려야만 해결되는 것처럼 보이는 요구가 오면, 수정하지 말고 어댑터/래퍼 레이어 해법을 제시하거나 사용자에게 보고한다.
    - 작업 후 `sha256sum`으로 두 파일의 해시가 위 값과 일치하는지 확인한다.
@@ -140,3 +141,4 @@ Anthropic 공식 지침 기반: [Claude Fable 5 / Mythos 5 발표](https://www.a
 ### 모든 모델 공통
 - 모델 ID는 정확한 문자열만 사용: `claude-fable-5`, `claude-opus-4-8`, `claude-sonnet-5`, `claude-haiku-4-5` (날짜 suffix 임의 부착 금지).
 - 이 앱 코드에 Claude API를 통합할 일이 생기면 최신 문서를 먼저 확인할 것 (파라미터가 모델 세대별로 다름: Fable 5/Opus 4.8은 `thinking` 수동 설정·sampling 파라미터를 거부).
+
