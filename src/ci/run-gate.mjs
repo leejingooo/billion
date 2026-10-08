@@ -18,6 +18,8 @@ if (!allPass) {
 const regression = spawnSync(process.execPath, ["--test",
   fileURLToPath(new URL("../selftest/mubae-turn.test.mjs", import.meta.url)),
   fileURLToPath(new URL("../selftest/mubae-turn-ui.test.mjs", import.meta.url)),
+  fileURLToPath(new URL("../selftest/operations.test.mjs", import.meta.url)),
+  fileURLToPath(new URL("../selftest/operations-ui.test.mjs", import.meta.url)),
 ], { stdio: "inherit" });
 if (regression.error || regression.status !== 0) {
   console.error("실제 엔진/체결 화면 검증 실패 — 배포 차단.");
