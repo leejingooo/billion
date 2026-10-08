@@ -1,0 +1,75 @@
+import {test} from "node:test";
+import assert from "node:assert/strict";
+import React from "react";
+import {create,act} from "react-test-renderer";
+import {createServer} from "vite";
+import {actualCycle} from "./operations-fixture.mjs";
+
+const text=n=>typeof n==="string"?n:(n.children||[]).map(text).join("");
+test("실제 앱: T 미리보기/적용/되돌리기 → 14600 독립 전략 → 통합 충돌 차단",async()=>{
+  const values=new Map();const win=new EventTarget();
+  win.localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k),key:i=>[...values.keys()][i],get length(){return values.size;}};
+  globalThis.window=win;
+  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,"navigator");let copied="";
+  Object.defineProperty(globalThis,"navigator",{configurable:true,value:{clipboard:{writeText:async value=>{copied=value;}}}});
+  const server=await createServer({server:{middlewareMode:true,hmr:false,ws:false},appType:"custom"});
+  let tree;
+  try {
+    const {default:App}=await server.ssrLoadModule("/src/App.jsx");
+    const {createAccount,listAccounts}=await server.ssrLoadModule("/src/storage/accounts.js");
+    const {rawSet,rawGet,installStorageAdapter}=await server.ssrLoadModule("/src/storage/adapter.js");
+    const {MUBAE_KEYS}=await server.ssrLoadModule("/src/features/cycleFunding.js");
+    installStorageAdapter();const a=createAccount("mubaeMulti","기존 SOXL");const s=actualCycle(), key=MUBAE_KEYS.mubaeMulti;
+    rawSet(a.id,key,JSON.stringify(s));
+    await act(async()=>{tree=create(React.createElement(App));});
+    const buttons=()=>tree.root.findAllByType("button");
+    const button=t=>{const b=buttons().find(b=>text(b)===t);assert.ok(b,`버튼 ${t}`);return b;};
+    const click=async t=>act(async()=>button(t).props.onClick());
+    await click("무한매수법");await act(async()=>buttons().find(b=>text(b).startsWith(a.label)).props.onClick());
+    await click("현재 사이클 T 보정 미리보기");
+    assert.ok(text(tree.root).includes("3.53125"));assert.equal(JSON.parse(rawGet(a.id,key)).T,4.09375);
+    // 미리보기 이후 상태가 변하면 stale apply 차단.
+    rawSet(a.id,key,JSON.stringify({...s,history:[...s.history],lastClose:159}));
+    await click("확인한 T 보정 적용");assert.ok(text(tree.root).includes("계좌가 변경"));
+    rawSet(a.id,key,JSON.stringify(s));await click("현재 사이클 T 보정 미리보기");await click("확인한 T 보정 적용");
+    assert.equal(JSON.parse(rawGet(a.id,key)).T,3.53125);
+    await click("설정");await click("마지막 하루 기록 되돌리기");
+    assert.deepEqual(JSON.parse(rawGet(a.id,key)),s);
+    await click("추가 자금으로 독립 전략 시작 ▼");
+    const input=label=>tree.root.findAllByType("input").find(n=>n.props["aria-label"]===label);
+    await act(async()=>input("독립 전략 직전 종가").props.onChange({target:{value:"158.91"}}));
+    await act(async()=>input("독립 전략 기준 거래일").props.onChange({target:{value:"2026-10-08"}}));
+    const form=tree.root.findAllByType("form").find(f=>text(f).includes("독립 전략 미리보기"));
+    await act(async()=>form.props.onSubmit({preventDefault(){}}));
+    assert.ok(text(tree.root).includes("730.00"));assert.equal(button("독립 전략 생성").props.disabled,true);
+    const check=tree.root.findAllByType("input").find(i=>i.props.type==="checkbox");
+    await act(async()=>check.props.onChange({target:{checked:true}}));
+    const createButton=button("독립 전략 생성");
+    await act(async()=>{createButton.props.onClick();createButton.props.onClick();});
+    assert.equal(listAccounts().length,2);
+    const b=listAccounts().find(x=>x.id!==a.id);const ns=JSON.parse(rawGet(b.id,key));
+    assert.equal(ns.cash,14600);assert.equal(ns.T,0);assert.equal(ns.shares,0);
+    assert.deepEqual(JSON.parse(rawGet(a.id,key)),s);
+    await click("통합 주문");
+    let checks=tree.root.findAllByType("input").filter(i=>i.props.type==="checkbox");
+    await act(async()=>checks[0].props.onChange({target:{checked:true}}));
+    checks=tree.root.findAllByType("input").filter(i=>i.props.type==="checkbox");
+    await act(async()=>checks[1].props.onChange({target:{checked:true}}));
+    checks=tree.root.findAllByType("input").filter(i=>i.props.type==="checkbox");
+    await act(async()=>checks.at(-1).props.onChange({target:{checked:true}}));
+    assert.ok(text(tree.root).includes("매수·매도 가격 구간이 겹칩니다"));
+    assert.equal(button("주문표 복사").props.disabled,true);
+    assert.ok(text(tree.root).includes("기존 SOXL:"));assert.ok(text(tree.root).includes("기존 SOXL · 추가자금:"));
+    assert.deepEqual(JSON.parse(rawGet(a.id,key)),s);assert.deepEqual(JSON.parse(rawGet(b.id,key)),ns);
+    rawSet(b.id,key,JSON.stringify({...ns,orderPriceDate:"2026-10-07"}));await click("새로고침");
+    assert.ok(text(tree.root).includes("기준 날짜/종가가 다릅니다"));assert.equal(button("주문표 복사").props.disabled,true);
+    // 충돌 없는 두 전략의 동일 주문은 합산되고 복사할 수 있다.
+    rawSet(b.id,key,JSON.stringify(s));await click("새로고침");
+    assert.equal(button("주문표 복사").props.disabled,false);
+    await click("주문표 복사");
+    assert.ok(copied.includes("기존 SOXL:7 / 기존 SOXL · 추가자금:7"));
+    const beforeCopy=copied;rawSet(b.id,key,JSON.stringify({...s,cash:s.cash+1}));
+    await click("주문표 복사");assert.equal(copied,beforeCopy);assert.ok(text(tree.root).includes("계좌가 변경됐습니다"));
+  } finally {if(tree) await act(async()=>tree.unmount());await server.close();delete globalThis.window;
+    if(navigatorDescriptor) Object.defineProperty(globalThis,"navigator",navigatorDescriptor);else delete globalThis.navigator;}
+});

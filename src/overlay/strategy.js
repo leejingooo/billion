@@ -23,7 +23,7 @@ export function mubaeCycles(state, fixedTicker = null) {
   if (!["SOXL", "TQQQ"].includes(ticker)) return [];
   const groups = new Map();
   for (const h of Array.isArray(state.history) ? state.history : []) {
-    if (h.kind === "funding") continue;
+    if (h.kind === "funding" || h.kind === "turn-correction") continue;
     const cycle = h.prevSnapshot?.cycle;
     if (!Number.isInteger(cycle)) continue;
     if (!groups.has(cycle)) groups.set(cycle, []);
@@ -52,3 +52,4 @@ export function mubaeCycles(state, fixedTicker = null) {
     return { cycle, ticker, capital, price, rows, error: null };
   });
 }
+
