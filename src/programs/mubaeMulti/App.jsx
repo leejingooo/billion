@@ -193,8 +193,31 @@ function simulateFills(s, orders, close, limitFilled) {
   return { fb, fs };
 }
 
+// V4.0의 +1/+0.5는 유지한다. 정수 체결 수량 판정은 구현 규칙이며 원문에 없는 비례 T는 만들지 않는다.
+function buyTurnIncrement(s, filledBuys, override) {
+  const buys = filledBuys.filter((o) => o.qty > 0);
+  if (!buys.length) return 0;
+  if (s.mode !== "general" || s.shares === 0 || s.T >= cfg(s).half) return 1;
+  const confirm = () => override === 0.5 || override === 1 ? override : null;
+  const price = buys[0].fillPrice;
+  if (!(price > 0) || !Number.isFinite(price)
+      || buys.some((o) => !Number.isInteger(o.qty) || o.fillPrice !== price)) return confirm();
+  const qty = buys.reduce((sum, o) => sum + o.qty, 0);
+  const orders = getOrders(s);
+  const fullQty = Math.floor(orders.info.per / price + 1e-9);
+  const halfQty = Math.floor(orders.info.per / 2 / price + 1e-9);
+  if (fullQty > 0 && qty === fullQty) return 1;
+  if (halfQty > 0 && qty === halfQty) return 0.5;
+  // 주문가 기준 정수 내림으로 정상 별지점 주문은 체결가 기준 절반 수량보다 적을 수 있다.
+  const eligible = orders.buys.filter((o) => price <= o.price);
+  const plannedQty = eligible.reduce((sum, o) => sum + o.qty, 0);
+  if (price > r2(s.avg) && qty < fullQty && qty === plannedQty
+      && eligible.length > 0 && eligible.every((o) => o.label !== "平단")) return 0.5;
+  return confirm();
+}
+
 // 하루 확정 → 새 상태
-function applyDay(s, { date, close, filledBuys, filledSells, revStarOverride }) {
+function applyDay(s, { date, close, filledBuys, filledSells, revStarOverride, buyTurnOverride }) {
   const { history: _hist, ...core } = s;
   const ns = JSON.parse(JSON.stringify(core));
   const events = [];
@@ -227,8 +250,10 @@ function applyDay(s, { date, close, filledBuys, filledSells, revStarOverride }) 
     if (buyQty > 0) {
       if (s.shares === 0) { T = 1; events.push("첫 매수 체결 → T=1"); }
       else if (s.T < c.half) {
-        const fullBuy = filledBuys.some((o) => o.label === "평단" || o.label === "");
-        const inc = fullBuy ? 1 : 0.5;
+        const inc = buyTurnIncrement(s, filledBuys, buyTurnOverride);
+        if (inc === null) throw new Error("체결 수량 판정 확인: T 증가분 확인이 필요합니다.");
+        const fullBuy = inc === 1;
+        if (buyTurnIncrement(s, filledBuys) === null) events.push("체결 수량 판정 확인 — 사용자가 T 증가분 확인");
         T += inc; events.push(`매수 체결 (전반전 ${fullBuy ? "1회분" : "절반분"}) → T+${inc}`);
       } else { T += 1; events.push("매수 체결 (후반전) → T+1"); }
     }
@@ -271,6 +296,7 @@ function applyDay(s, { date, close, filledBuys, filledSells, revStarOverride }) 
     ...s.history,
     {
       date, close, mode: s.mode,
+      buyTurnOverride: buyTurnOverride ?? null,
       buys: filledBuys.map((o) => ({ qty: o.qty, price: o.fillPrice })),
       sells: filledSells.map((o) => ({ qty: o.qty, price: o.fillPrice, label: o.label })),
       realizedDay, events, modeMsg,
@@ -303,6 +329,8 @@ export default function App() {
   const [revStarOv, setRevStarOv] = useState("");
   const [editFills, setEditFills] = useState(null); // {fb, fs} 편집본
   const [flash, setFlash] = useState(null);
+  const [buyTurnOverride, setBuyTurnOverride] = useState(null);
+  useEffect(() => { setBuyTurnOverride(null); }, [dClose, editFills]);
 
   const [corrupt, setCorrupt] = useState(false);
 
@@ -402,12 +430,13 @@ export default function App() {
   const effLimitFilled = limitAuto || dLimitFilled;
   const sim = hasClose ? simulateFills(s, orders, close, effLimitFilled) : null;
   const fills = editFills || sim;
+  const needsTurnChoice = fills && buyTurnIncrement(s, fills.fb) === null;
 
   const confirmDay = () => {
-    if (!hasClose || !fills) return;
+    if (!hasClose || !fills || (needsTurnChoice && buyTurnOverride === null)) return;
     const fb = fills.fb.filter((o) => o.qty > 0);
     const fs = fills.fs.filter((o) => o.qty > 0);
-    const { ns, modeMsg } = applyDay(s, { date: dDate, close, filledBuys: fb, filledSells: fs, revStarOverride: parseFloat(revStarOv) || null });
+    const { ns, modeMsg } = applyDay(s, { date: dDate, close, filledBuys: fb, filledSells: fs, revStarOverride: parseFloat(revStarOv) || null, buyTurnOverride });
     persist(ns);
     setDClose(""); setDLimitFilled(false); setEditFills(null); setRevStarOv("");
     setFlash(modeMsg || "기록 완료 — 내일 주문이 갱신되었습니다");
@@ -504,8 +533,15 @@ export default function App() {
                 onQty={(i, q) => { const c = { fb: fills.fb.map((o, j) => j === i ? { ...o, qty: q } : o), fs: fills.fs }; setEditFills(c); }} />
               <FillEditor title="매도 체결" list={fills.fs} color="blue"
                 onQty={(i, q) => { const c = { fb: fills.fb, fs: fills.fs.map((o, j) => j === i ? { ...o, qty: q } : o) }; setEditFills(c); }} />
-              <PreviewSummary s={s} fills={fills} close={close} />
-              <button onClick={confirmDay} className="w-full mt-4 py-2.5 rounded-lg bg-amber-400 text-zinc-950 font-bold text-sm hover:bg-amber-300 transition">이 내용으로 하루 확정</button>
+              {needsTurnChoice && <div className="my-3 p-3 border border-amber-600 rounded text-xs text-amber-200">
+                예정된 절반분·1회분 수량과 일치하지 않거나 체결가가 여러 개입니다. 원문에 부분체결 판정이 명시되지 않아 자동 확정을 중단합니다.
+                <div className="mt-2">실제 체결과 운용 기준 확인 후 선택하세요. 선택은 원문 정답을 보증하지 않으며 기록에 남습니다.</div>
+                <select aria-label="체결 수량 T 증가분" value={buyTurnOverride ?? ""} onChange={(e) => setBuyTurnOverride(e.target.value ? Number(e.target.value) : null)} className="mt-2 bg-zinc-900 p-2">
+                  <option value="">T 증가분 확인 필요</option><option value="0.5">절반 매수 (+0.5)</option><option value="1">1회 매수 (+1)</option>
+                </select>
+              </div>}
+              {(!needsTurnChoice || buyTurnOverride !== null) && <PreviewSummary s={s} fills={fills} close={close} buyTurnOverride={buyTurnOverride} />}
+              <button onClick={confirmDay} disabled={needsTurnChoice && buyTurnOverride === null} className="w-full mt-4 py-2.5 rounded-lg bg-amber-400 text-zinc-950 font-bold text-sm hover:bg-amber-300 transition">이 내용으로 하루 확정</button>
             </div>
           )}
           {!hasClose && <div className="text-sm text-zinc-500">종가를 입력하면 체결 결과를 미리 보여드립니다.</div>}
@@ -526,6 +562,7 @@ export default function App() {
                 {h.buys.length === 0 && h.sells.length === 0 && <span>체결 없음</span>}
               </div>
               <div className="text-[11px] text-zinc-500 mt-1">→ T {fmtN(h.after.T, 3)} · 평단 {h.after.shares > 0 ? fmt$(h.after.avg) : "—"} · 보유 {h.after.shares}주 · 잔금 {fmt$(h.after.cash)}</div>
+              {h.buyTurnOverride != null && <div className="text-xs text-amber-300">체결 수량 판정 확인: 사용자 확인 T +{h.buyTurnOverride}</div>}
               {h.modeMsg && <div className="text-[11px] text-amber-300 mt-1">{h.modeMsg}</div>}
             </div>
           ))}
@@ -647,8 +684,8 @@ function FillEditor({ title, list, color, onQty }) {
     </div>
   );
 }
-function PreviewSummary({ s, fills, close }) {
-  const { ns, events, modeMsg } = applyDay(s, { date: "preview", close, filledBuys: fills.fb.filter((o) => o.qty > 0), filledSells: fills.fs.filter((o) => o.qty > 0) });
+function PreviewSummary({ s, fills, close, buyTurnOverride }) {
+  const { ns, events, modeMsg } = applyDay(s, { date: "preview", close, filledBuys: fills.fb.filter((o) => o.qty > 0), filledSells: fills.fs.filter((o) => o.qty > 0), buyTurnOverride });
   return (
     <div className="mt-3 pt-3 border-t border-zinc-800 text-xs text-zinc-400 leading-relaxed">
       <div className="font-bold text-zinc-300 mb-1">확정 시 상태</div>
@@ -658,3 +695,4 @@ function PreviewSummary({ s, fills, close }) {
     </div>
   );
 }
+
