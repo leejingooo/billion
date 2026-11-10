@@ -416,9 +416,19 @@ export default function App() {
           )}
           {orders.notes.map((n, i) => <div key={i} className="mb-2 text-xs text-amber-300/90">※ {n}</div>)}
           <div className="grid md:grid-cols-2 gap-4">
-            <OrderTable title="매수 주문 (LOC)" rows={orders.buys} color="red" empty="오늘 매수 주문 없음" />
+            <OrderTable title="실제 매수 주문 (LOC)" rows={orders.buys} color="red" empty="오늘 매수 주문 없음" />
             <OrderTable title="매도 주문" rows={orders.sells} color="blue" empty="보유 없음 — 매도 주문 없음" />
           </div>
+          {orders.info.uncappedBuys && (
+            <details open className="mt-4 rounded-xl border border-zinc-800 p-3">
+              <summary className="cursor-pointer text-sm font-semibold text-zinc-200">상한 적용 전 매수표 (참고용)</summary>
+              <p className="my-2 text-xs text-zinc-400">
+                {fmt$(orders.buys[0].price)} 이상인 별지점·평단·사다리 주문은 해당 수량을 합쳐 위 실제 주문표의 큰수 {orders.buys[0].qty}주에 반영했습니다.
+                그 아래 가격의 주문은 위 실제 주문표에서 각각 확인할 수 있습니다.
+              </p>
+              <OrderTable title="원래 별지점·평단·사다리" rows={orders.info.uncappedBuys} color="red" empty="매수 계획 없음" />
+            </details>
+          )}
           <div className="mt-3 text-[11px] text-zinc-500 leading-relaxed">
             {s.mode === "general" && <>오늘 1회매수액 시도: <b className="text-zinc-300">{fmt$(orders.info.per)}</b> = 잔금 ÷ (40 − T) · 매수는 전부 LOC. 지정가매도는 프리장 시작(서머타임 저녁 5시 / 비서머 6시)에 걸어 프리·본·애프터장 전체에 효력. 주간장 미사용.</>}
             {s.mode === "reverse" && !s.revFirst && <>쿼터매수 시도액: <b className="text-zinc-300">{fmt$(orders.info.quarterBuyAmt)}</b> = 잔금 ÷ 4</>}

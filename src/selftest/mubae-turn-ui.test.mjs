@@ -84,6 +84,12 @@ test("주문 상한 +30%로 미체결된 날의 애프터장 매수를 실제 �
       });
       const confirm = () => button("이 내용으로 하루 확정");
 
+      const allMerged = getOrders({ ...state, lastClose: 30 });
+      assert.equal(allMerged.buys.length, 1);
+      assert.ok(allMerged.info.uncappedBuys.some(o => o.label === ""));
+      assert.equal(allMerged.buys[0].qty, allMerged.info.uncappedBuys.reduce((sum, o) => sum + o.qty, 0));
+      assert.match(text(tree.root.findByType("details")), /원래 별지점·평단·사다리/);
+
       await act(async () => button("② 장 마감 입력").props.onClick());
       await enter("예: 26.85", "132");
       assert.match(text(tree.root), /상한으로 미체결된 원래 주문 수량: 3주/);
