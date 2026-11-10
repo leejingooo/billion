@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { mergeCappedBuys } from "../../features/mubaeBuyCap";
 
 /* ============================================================
    무한매수법 V4.0 — SOXL 40분할 일일 주문 도우미
@@ -58,22 +59,19 @@ function getOrders(s, revStarOverride) {
       const star = starGeneral(s);
       info.star = star;
       const buyTop = r2(star - 0.01);
-      const brokerCap = Math.floor(Math.round(s.lastClose * 100) * 130 / 100) / 100;
-      const topPrice = buyTop > brokerCap ? brokerCap : buyTop;
-      const topLabel = buyTop > brokerCap ? `큰수 (별지점 ${fmt$(buyTop)}가 전일 종가 +30% 상한 초과)` : "별지점 −0.01";
 
       if (s.T < SPLIT / 2) {
         // 전반전: 절반 별지점, 나머지 평단, 아래 사다리
         const half = per / 2;
-        const n1 = Math.floor(half / topPrice);
-        const n2 = Math.floor((per - n1 * topPrice) / s.avg);
-        if (n1 > 0) buys.push({ price: topPrice, qty: n1, label: topLabel, type: "LOC", side: "buy" });
+        const n1 = Math.floor(half / buyTop);
+        const n2 = Math.floor((per - n1 * buyTop) / s.avg);
+        if (n1 > 0) buys.push({ price: buyTop, qty: n1, label: "별지점 −0.01", type: "LOC", side: "buy" });
         if (n2 > 0) buys.push({ price: r2(s.avg), qty: n2, label: "평단", type: "LOC", side: "buy" });
         buys.push(...ladder(per, n1 + n2 + 1));
       } else {
         // 후반전: 전액 별지점, 아래 사다리
-        const n1 = Math.floor(per / topPrice);
-        if (n1 > 0) buys.push({ price: topPrice, qty: n1, label: topLabel, type: "LOC", side: "buy" });
+        const n1 = Math.floor(per / buyTop);
+        if (n1 > 0) buys.push({ price: buyTop, qty: n1, label: "별지점 −0.01", type: "LOC", side: "buy" });
         buys.push(...ladder(per, n1 + 1));
       }
 
@@ -113,7 +111,12 @@ function getOrders(s, revStarOverride) {
       }
     }
   }
-  return { buys: buys.filter((o) => o.qty > 0 && (o.price === null || o.price > 0)), sells, info, notes };
+  const originalBuys = buys.filter((o) => o.qty > 0 && (o.price === null || o.price > 0));
+  const submittedBuys = s.mode === "general" && s.shares > 0
+    ? mergeCappedBuys(originalBuys, s.lastClose)
+    : originalBuys;
+  if (submittedBuys !== originalBuys) info.uncappedBuys = originalBuys;
+  return { buys: submittedBuys, sells, info, notes };
 }
 
 // 종가 기준 체결 시뮬레이션
@@ -323,6 +326,10 @@ export default function App() {
   const limitAuto = hasClose && limitOrder != null && close >= limitOrder.price;
   const effLimitFilled = limitAuto || dLimitFilled;
   const sim = hasClose ? simulateFills(s, orders, close, effLimitFilled) : null;
+  const missedByCapQty = hasClose && orders.info.uncappedBuys
+    ? orders.info.uncappedBuys.filter((o) => close <= o.price).reduce((sum, o) => sum + o.qty, 0)
+      - sim.fb.reduce((sum, o) => sum + o.qty, 0)
+    : 0;
   const fills = editFills || sim;
   const hasAfterHoursFill = afterHoursQty !== "" || afterHoursPrice !== "";
   const qty = Number(afterHoursQty);
@@ -443,6 +450,9 @@ export default function App() {
                 onQty={(i, q) => { const c = { fb: fills.fb, fs: fills.fs.map((o, j) => j === i ? { ...o, qty: q } : o) }; setEditFills(c); }} />
               <div className="my-3 border-t border-zinc-800 pt-3">
                 <div className="mb-2 text-xs font-bold text-red-400">애프터장 수동 매수 (선택)</div>
+                {missedByCapQty > 0 && <p className="mb-2 text-xs text-amber-300">
+                  정규장 종가 기준 상한으로 미체결된 원래 주문 수량: {missedByCapQty}주
+                </p>}
                 <p className="mb-2 text-xs text-zinc-400">자동 체결에 추가할 실제 수량과 체결가를 입력하세요. 여러 번 체결됐으면 합계 수량과 가중평균 체결가를 입력하세요.</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="애프터장 체결 수량"><Inp v={afterHoursQty} set={setAfterHoursQty} ph="예: 2" /></Field>

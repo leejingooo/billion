@@ -2,13 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { mergeCappedBuys } from "../features/mubaeBuyCap.js";
 
 const initial = {initialized:true,ticker:"SOXL",split:20,cash:44164.29,shares:15,avg:146.25,T:1,
   mode:"general",revFirst:false,cycle:2,cycleStartCash:46358.04,realizedTotal:0,
   closes:[146.25],lastClose:146.25,bigPct:10,history:[]};
 function engine(type) {
   const src=readFileSync(new URL(`../programs/${type}/App.jsx`,import.meta.url),"utf8");
-  const ctx=vm.createContext({});
+  const ctx=vm.createContext({ mergeCappedBuys });
   vm.runInContext(src.split("/* ---------------- UI ---------------- */")[0].replace(/^import .*;\n/gm,""),ctx);
   return vm.runInContext("({getOrders,simulateFills,applyDay,buyTurnIncrement})",ctx);
 }
