@@ -84,7 +84,7 @@ src/
 - VR 체결 캡처는 rung 기반(엔진 계산가를 그대로 체결 확정). 절대값 보정은 안전 해치로만.
 
 ### 이미 확정된 설계 결정 (재논의 불필요)
-- `brokerCap = lastClose × 1.18` (증권사 ±20% 거부 대응)
+- `brokerCap = lastClose × 1.30` (센트 미만 절사, 별지점 LOC 매수 상한)
 - 리버스 종료 방향: `close > avg × (1 − 0.20)` — 평단−20% **위로 회복** 시 종료
 - n1=0 억제: `floor(half/topPrice) = 0`이면 별지점 매수 줄 자체가 안 뜸 (정상 동작)
 - `reconBaseRealized`: VR 평단 직접 보정 시 이전 실현손익 보존용, 영속성 bundle에 포함

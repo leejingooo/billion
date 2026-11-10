@@ -58,9 +58,9 @@ function getOrders(s, revStarOverride) {
       const star = starGeneral(s);
       info.star = star;
       const buyTop = r2(star - 0.01);
-      const brokerCap = r2(s.lastClose * 1.18);
+      const brokerCap = Math.floor(Math.round(s.lastClose * 100) * 130 / 100) / 100;
       const topPrice = buyTop > brokerCap ? brokerCap : buyTop;
-      const topLabel = buyTop > brokerCap ? `큰수 (별지점 ${fmt$(buyTop)}가 ±20% 초과)` : "별지점 −0.01";
+      const topLabel = buyTop > brokerCap ? `큰수 (별지점 ${fmt$(buyTop)}가 전일 종가 +30% 상한 초과)` : "별지점 −0.01";
 
       if (s.T < SPLIT / 2) {
         // 전반전: 절반 별지점, 나머지 평단, 아래 사다리
@@ -235,7 +235,10 @@ function applyDay(s, { date, close, filledBuys, filledSells, revStarOverride, bu
     {
       date, close, mode: s.mode,
       buyTurnOverride: buyTurnOverride ?? null,
-      buys: filledBuys.map((o) => ({ qty: o.qty, price: o.fillPrice })),
+      buys: filledBuys.map((o) => ({
+        qty: o.qty, price: o.fillPrice,
+        ...(o.type === "MANUAL" ? { source: "afterHours" } : {}),
+      })),
       sells: filledSells.map((o) => ({ qty: o.qty, price: o.fillPrice, label: o.label })),
       realizedDay, events, modeMsg,
       after: { T: ns.T, avg: ns.avg, shares: ns.shares, cash: ns.cash, mode: ns.mode },
@@ -266,7 +269,9 @@ export default function App() {
   const [editFills, setEditFills] = useState(null); // {fb, fs} 편집본
   const [flash, setFlash] = useState(null);
   const [buyTurnOverride, setBuyTurnOverride] = useState(null);
-  useEffect(() => { setBuyTurnOverride(null); }, [dClose, editFills]);
+  const [afterHoursQty, setAfterHoursQty] = useState("");
+  const [afterHoursPrice, setAfterHoursPrice] = useState("");
+  useEffect(() => { setBuyTurnOverride(null); }, [dClose, editFills, afterHoursQty, afterHoursPrice]);
 
   useEffect(() => {
     (async () => {
@@ -312,22 +317,36 @@ export default function App() {
 
   const orders = getOrders(s, parseFloat(revStarOv) || null);
   const close = parseFloat(dClose);
-  const hasClose = !isNaN(close) && close > 0;
+  const hasClose = Number.isFinite(close) && close > 0;
   // 종가 ≥ 지정가면 장중 체결이 보장되므로 자동 체결 처리 (수동 토글은 종가 미달 + 장중 터치 케이스용)
   const limitOrder = orders.sells.find((o) => o.type === "LIMIT");
   const limitAuto = hasClose && limitOrder != null && close >= limitOrder.price;
   const effLimitFilled = limitAuto || dLimitFilled;
   const sim = hasClose ? simulateFills(s, orders, close, effLimitFilled) : null;
   const fills = editFills || sim;
-  const needsTurnChoice = fills && buyTurnIncrement(s, fills.fb) === null;
+  const hasAfterHoursFill = afterHoursQty !== "" || afterHoursPrice !== "";
+  const qty = Number(afterHoursQty);
+  const fillPrice = Number(afterHoursPrice);
+  const validAfterHoursFill = Number.isSafeInteger(qty) && qty > 0 && Number.isFinite(fillPrice) && fillPrice > 0;
+  const fb = fills?.fb.filter((o) => o.qty > 0) ?? [];
+  const fs = fills?.fs.filter((o) => o.qty > 0) ?? [];
+  if (hasAfterHoursFill && validAfterHoursFill) {
+    fb.push({ qty, fillPrice, label: "애프터장 수동 매수", type: "MANUAL", side: "buy" });
+  }
+  const buyCost = fb.reduce((sum, o) => sum + o.qty * o.fillPrice, 0);
+  const availableCash = s.cash + fs.reduce((sum, o) => sum + o.qty * o.fillPrice, 0);
+  const fillError = hasAfterHoursFill && (!validAfterHoursFill
+    ? "애프터장 체결 수량(양의 정수)과 실제 체결가를 모두 입력하세요."
+    : buyCost > availableCash + 1e-8 ? "전체 매수 금액이 매도 대금을 포함한 잔금을 초과합니다." : null);
+  const needsTurnChoice = fills && !fillError && buyTurnIncrement(s, fb) === null;
+  const canConfirm = hasClose && fills && !fillError && (!needsTurnChoice || buyTurnOverride !== null);
 
   const confirmDay = () => {
-    if (!hasClose || !fills || (needsTurnChoice && buyTurnOverride === null)) return;
-    const fb = fills.fb.filter((o) => o.qty > 0);
-    const fs = fills.fs.filter((o) => o.qty > 0);
+    if (!canConfirm) return;
     const { ns, modeMsg } = applyDay(s, { date: dDate, close, filledBuys: fb, filledSells: fs, revStarOverride: parseFloat(revStarOv) || null, buyTurnOverride });
     persist(ns);
     setDClose(""); setDLimitFilled(false); setEditFills(null); setRevStarOv("");
+    setAfterHoursQty(""); setAfterHoursPrice("");
     setFlash(modeMsg || "기록 완료 — 내일 주문이 갱신되었습니다");
     setTimeout(() => setFlash(null), 6000);
     setTab("orders");
@@ -422,6 +441,15 @@ export default function App() {
                 onQty={(i, q) => { const c = { fb: fills.fb.map((o, j) => j === i ? { ...o, qty: q } : o), fs: fills.fs }; setEditFills(c); }} />
               <FillEditor title="매도 체결" list={fills.fs} color="blue"
                 onQty={(i, q) => { const c = { fb: fills.fb, fs: fills.fs.map((o, j) => j === i ? { ...o, qty: q } : o) }; setEditFills(c); }} />
+              <div className="my-3 border-t border-zinc-800 pt-3">
+                <div className="mb-2 text-xs font-bold text-red-400">애프터장 수동 매수 (선택)</div>
+                <p className="mb-2 text-xs text-zinc-400">자동 체결에 추가할 실제 수량과 체결가를 입력하세요. 여러 번 체결됐으면 합계 수량과 가중평균 체결가를 입력하세요.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="애프터장 체결 수량"><Inp v={afterHoursQty} set={setAfterHoursQty} ph="예: 2" /></Field>
+                  <Field label="애프터장 체결가 (USD)"><Inp v={afterHoursPrice} set={setAfterHoursPrice} ph="예: 26.90" /></Field>
+                </div>
+              </div>
+              {fillError && <p role="alert" className="text-xs text-red-400">{fillError}</p>}
               {needsTurnChoice && <div className="my-3 p-3 border border-amber-600 rounded text-xs text-amber-200">
                 예정된 절반분·1회분 수량과 일치하지 않거나 체결가가 여러 개입니다. 원문에 부분체결 판정이 명시되지 않아 자동 확정을 중단합니다.
                 <div className="mt-2">실제 체결과 운용 기준 확인 후 선택하세요. 선택은 원문 정답을 보증하지 않으며 기록에 남습니다.</div>
@@ -429,8 +457,8 @@ export default function App() {
                   <option value="">T 증가분 확인 필요</option><option value="0.5">절반 매수 (+0.5)</option><option value="1">1회 매수 (+1)</option>
                 </select>
               </div>}
-              {(!needsTurnChoice || buyTurnOverride !== null) && <PreviewSummary s={s} fills={fills} close={close} buyTurnOverride={buyTurnOverride} />}
-              <button onClick={confirmDay} disabled={needsTurnChoice && buyTurnOverride === null} className="w-full mt-4 py-2.5 rounded-lg bg-amber-400 text-zinc-950 font-bold text-sm hover:bg-amber-300 transition">이 내용으로 하루 확정</button>
+              {canConfirm && <PreviewSummary s={s} fills={{ fb, fs }} close={close} buyTurnOverride={buyTurnOverride} />}
+              <button onClick={confirmDay} disabled={!canConfirm} className="w-full mt-4 py-2.5 rounded-lg bg-amber-400 text-zinc-950 font-bold text-sm hover:bg-amber-300 transition">이 내용으로 하루 확정</button>
             </div>
           )}
           {!hasClose && <div className="text-sm text-zinc-500">종가를 입력하면 체결 결과를 미리 보여드립니다.</div>}
@@ -446,7 +474,9 @@ export default function App() {
                 <span className={`${h.realizedDay >= 0 ? "text-red-400" : "text-blue-400"}`}>{h.sells.length ? `실현 ${fmt$(h.realizedDay)}` : ""}</span>
               </div>
               <div className="text-xs text-zinc-400 mt-1">
-                {h.buys.reduce((a, o) => a + o.qty, 0) > 0 && <span className="mr-3">매수 {h.buys.reduce((a, o) => a + o.qty, 0)}주 @ {fmt$(h.buys[0].price)}</span>}
+                {h.buys.map((buy, j) => <span key={j} className="mr-3">
+                  {buy.source === "afterHours" ? "애프터장 매수" : "매수"} {buy.qty}주 @ {fmt$(buy.price)}
+                </span>)}
                 {h.sells.map((o, j) => <span key={j} className="mr-3">매도 {o.qty}주 @ {fmt$(o.price)} ({o.label.split(" ")[0]})</span>)}
                 {h.buys.length === 0 && h.sells.length === 0 && <span>체결 없음</span>}
               </div>
