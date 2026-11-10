@@ -65,6 +65,18 @@ test("주문 상한 +30%로 미체결된 날의 애프터장 매수를 실제 �
       const cappedBuy = getOrders(state).buys[0];
       assert.equal(cappedBuy.price, 130.01);
       assert.match(cappedBuy.label, /\+30%/);
+
+      // 별지점·평단·사다리 모두 상한을 넘는 예에서 원래 체결 수량을 보존한다.
+      for (const T of [1, 25]) {
+        const capped = getOrders({ ...state, avg: 150, T });
+        const original = getOrders({ ...state, avg: 150, T, lastClose: 200 }).buys;
+        const qtyAt = (buys, price) => buys.filter(o => o.price >= price).reduce((sum, o) => sum + o.qty, 0);
+        const cap = capped.buys[0].price;
+        assert.equal(cap, 130.01);
+        assert.equal(capped.buys[0].qty, qtyAt(original, cap));
+        assert.deepEqual(capped.buys.slice(1), original.filter(o => o.price < cap));
+        assert.equal(qtyAt(capped.buys, cap - 1), qtyAt(original, cap - 1));
+      }
       await act(async () => { tree = create(React.createElement(App)); });
       const button = label => tree.root.findAllByType("button").find(b => text(b) === label);
       const enter = (placeholder, value) => act(async () => {
@@ -74,6 +86,7 @@ test("주문 상한 +30%로 미체결된 날의 애프터장 매수를 실제 �
 
       await act(async () => button("② 장 마감 입력").props.onClick());
       await enter("예: 26.85", "132");
+      assert.match(text(tree.root), /상한으로 미체결된 원래 주문 수량: 3주/);
       assert.equal(tree.root.findAllByType("input").filter(i => i.props.type === "number").length, 0);
       await enter("예: 2", "2");
       assert.equal(confirm().props.disabled, true);

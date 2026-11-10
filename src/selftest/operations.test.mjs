@@ -2,13 +2,14 @@ import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import vm from "node:vm";
+import { mergeCappedBuys } from "../features/mubaeBuyCap.js";
 import {previewTurnRepair,applyTurnRepair} from "../features/turnRepair.js";
 import {independentCapitalState} from "../features/independentCapital.js";
 import {combineOrders} from "../features/combinedOrders.js";
 import {mubaeCycles} from "../overlay/strategy.js";
 import {actualCycle} from "./operations-fixture.mjs";
 
-const ctx=vm.createContext({});
+const ctx=vm.createContext({ mergeCappedBuys });
 const src=readFileSync(new URL("../programs/mubaeMulti/App.jsx",import.meta.url),"utf8");
 vm.runInContext(src.split("/* ---------------- UI ---------------- */")[0].replace(/^import .*;\n/gm,""),ctx);
 const {buyTurnIncrement:classify,getOrders}=vm.runInContext("({buyTurnIncrement,getOrders})",ctx);
