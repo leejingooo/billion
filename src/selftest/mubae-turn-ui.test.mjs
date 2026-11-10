@@ -42,3 +42,60 @@ test("실제 React/Vite: 정상 체결 자동 판정, 부분체결 차단·확�
     }
   } finally {if(tree) await act(async()=>tree.unmount());await server.close();delete globalThis.window;}
 });
+
+test("주문 상한 +30%로 미체결된 날의 애프터장 매수를 실제 체결가로 저장", async () => {
+  const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false }, appType: "custom" });
+  let tree;
+  try {
+    for (const type of ["mubaeMulti", "mubaeSingle"]) {
+      let saved;
+      const state = {
+        initialized: true, ticker: "SOXL", split: 40, principal: 45000, cash: 43000,
+        shares: 15, avg: 120, T: 1, mode: "general", revFirst: false, cycle: 1,
+        cycleStartCash: 45000, realizedTotal: 0, closes: [100.01], lastClose: 100.01,
+        bigPct: 10, history: [],
+      };
+      globalThis.window = {
+        storage: {
+          get: async () => ({ value: JSON.stringify(state) }),
+          set: async (key, value) => { saved = JSON.parse(value); },
+        },
+      };
+      const { default: App, getOrders } = await server.ssrLoadModule(`/src/programs/${type}/App.jsx`);
+      const cappedBuy = getOrders(state).buys[0];
+      assert.equal(cappedBuy.price, 130.01);
+      assert.match(cappedBuy.label, /\+30%/);
+      await act(async () => { tree = create(React.createElement(App)); });
+      const button = label => tree.root.findAllByType("button").find(b => text(b) === label);
+      const enter = (placeholder, value) => act(async () => {
+        tree.root.findByProps({ placeholder }).props.onChange({ target: { value } });
+      });
+      const confirm = () => button("이 내용으로 하루 확정");
+
+      await act(async () => button("② 장 마감 입력").props.onClick());
+      await enter("예: 26.85", "132");
+      assert.equal(tree.root.findAllByType("input").filter(i => i.props.type === "number").length, 0);
+      await enter("예: 2", "2");
+      assert.equal(confirm().props.disabled, true);
+      await enter("예: 26.90", "30000");
+      assert.equal(confirm().props.disabled, true);
+      await enter("예: 26.90", "132.50");
+      assert.equal(confirm().props.disabled, true);
+      await act(async () => tree.root.findByType("select").props.onChange({ target: { value: "0.5" } }));
+      await act(async () => confirm().props.onClick());
+
+      assert.equal(saved.lastClose, 132);
+      assert.equal(saved.cash, 42735);
+      assert.equal(saved.shares, 17);
+      assert.equal(saved.avg, (15 * 120 + 2 * 132.5) / 17);
+      assert.equal(saved.T, 1.5);
+      assert.deepEqual(saved.history.at(-1).buys, [{ qty: 2, price: 132.5, source: "afterHours" }]);
+      await act(async () => tree.unmount());
+      tree = null;
+    }
+  } finally {
+    if (tree) await act(async () => tree.unmount());
+    await server.close();
+    delete globalThis.window;
+  }
+});
