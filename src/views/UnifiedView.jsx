@@ -12,6 +12,9 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
   const snaps = useMemo(() => accounts.map((a) => buildSnapshot(a, priceMap)), [accounts, priceMap, tick]);
   const totals = useMemo(() => portfolioTotals(snaps), [snaps]);
   const started = snaps.filter((s) => s.started && !s.archived);
+  const soxlShares = started
+    .filter((s) => s.ticker === "SOXL")
+    .reduce((sum, s) => sum + s.shares, 0);
   const [managing, setManaging] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editLabel, setEditLabel] = useState("");
@@ -58,6 +61,10 @@ export default function UnifiedView({ priceMap, onPrice, tick, onChange }) {
           <Cell k="실현손익 누계" v={usd(totals.realized)} tone={totals.realized} />
           <Cell k="실현수익률" v={pct(totals.realizedReturnPct)} tone={totals.realizedReturnPct} />
           <Cell k="총수익률" v={pct(totals.totalReturnPct)} tone={totals.totalReturnPct} big />
+        </div>
+
+        <div className="mb-5 overflow-hidden rounded-xl border border-zinc-800">
+          <Cell k="SOXL 총 보유 수량 · 무한매수 운용 계좌" v={`${soxlShares.toLocaleString("ko-KR")}주`} big />
         </div>
 
         <AssetHistory snaps={snaps} accounts={accounts} />
