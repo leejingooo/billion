@@ -17,8 +17,8 @@ for(const type of ["mubaeMulti","mubaeSingle"]) {
   const e=engine(type);
   const state=type==="mubaeSingle"?{...initial,cash:initial.cash*39/19}:initial;
   const fill=(qty,price,label="")=>({qty,fillPrice:price,label,type:"LOC"});
-  const day=(s,buys,sells=[],override)=>e.applyDay(s,{date:"test",close:buys[0]?.fillPrice || 160,
-    filledBuys:buys,filledSells:sells,buyTurnOverride:override}).ns;
+  const day=(s,buys,sells=[])=>e.applyDay(s,{date:"test",close:buys[0]?.fillPrice || 160,
+    filledBuys:buys,filledSells:sells}).ns;
   test(`${type}: 9/25 기존 주문가격 보존, 6+사다리1주 → +0.5`,()=>{
     const o=e.getOrders(state);
     assert.equal(o.buys.find(x=>x.label==="").price,154.96);
@@ -53,20 +53,15 @@ for(const type of ["mubaeMulti","mubaeSingle"]) {
       assert.equal(e.buyTurnIncrement(s,f.fb),expected);
     }
   });
-  test(`${type}: 불명확한 부분/다중가격 체결은 차단, 확인 기록`,()=>{
-    const before=JSON.stringify(state);
-    const fills=[fill(3,146.33)];
-    assert.equal(e.buyTurnIncrement(state,fills),null);
-    assert.throws(()=>day(state,fills),/확인/);
-    assert.throws(()=>day(state,fills,[],.7),/확인/);
-    assert.equal(e.buyTurnIncrement(state,[fill(3,146.33),fill(4,146.34)]),null);
-    for(const inc of [.5,1]) {
-      const ns=day(state,fills,[],inc);
-      assert.equal(ns.T,state.T+inc);
-      assert.equal(ns.history.at(-1).buyTurnOverride,inc);
-      assert.equal(ns.history.at(-1).prevSnapshot.T,state.T);
-    }
-    assert.equal(JSON.stringify(state),before);
+  test(`${type}: 종가 기준 정수 1회분과 부분·다중가격 체결을 자동 처리`,()=>{
+    const split=type==="mubaeSingle"?40:20;
+    const s={...state,cash:500*(split-state.T)};
+    const settle=buys=>e.applyDay(s,{date:"test",close:119,filledBuys:buys,filledSells:[]}).ns;
+    assert.equal(settle([fill(4,119)]).T,2); // $476 체결로 1회분 충족
+    assert.equal(settle([fill(2,119),fill(2,120)]).T,2);
+    assert.equal(settle([fill(3,119)]).T,1.5);
+    assert.equal(settle([fill(5,119)]).T,2);
+    assert.equal(settle([]).T,1);
   });
   test(`${type}: 매도 곱셈·후반전·첫매수·리버스 불변`,()=>{
     const sell=(type,label)=>({qty:3,fillPrice:170,type,label});

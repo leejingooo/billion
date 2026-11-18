@@ -5,7 +5,7 @@ import { create, act } from "react-test-renderer";
 import { createServer } from "vite";
 
 const text=n=>typeof n==="string"?n:(n.children||[]).map(text).join("");
-test("실제 React/Vite: 정상 체결 자동 판정, 부분체결 차단·확인·기록",async()=>{
+test("실제 React/Vite: 정상 체결과 부분체결을 확인창 없이 자동 판정",async()=>{
   const server=await createServer({server:{middlewareMode:true,hmr:false,ws:false},appType:"custom"});
   let tree;
   try {
@@ -26,17 +26,10 @@ test("실제 React/Vite: 정상 체결 자동 판정, 부분체결 차단·확�
       assert.ok(text(tree.root).includes("T+0.5"));
       const qty=()=>tree.root.findAllByType("input").filter(i=>i.props.type==="number");
       await act(async()=>qty()[0].props.onChange({target:{value:"2"}}));
-      assert.equal(button("이 내용으로 하루 확정").props.disabled,true);
-      await act(async()=>button("이 내용으로 하루 확정").props.onClick());
-      assert.equal(saved,undefined);
-      await act(async()=>tree.root.findByType("select").props.onChange({target:{value:"0.5"}}));
+      assert.equal(tree.root.findAllByType("select").length,0);
       assert.equal(button("이 내용으로 하루 확정").props.disabled,false);
-      await act(async()=>qty()[0].props.onChange({target:{value:"3"}}));
-      assert.equal(button("이 내용으로 하루 확정").props.disabled,true);
-      await act(async()=>tree.root.findByType("select").props.onChange({target:{value:"0.5"}}));
       await act(async()=>button("이 내용으로 하루 확정").props.onClick());
       assert.equal(saved.T,1.5);
-      assert.equal(saved.history.at(-1).buyTurnOverride,.5);
       assert.equal(saved.history.at(-1).prevSnapshot.T,1);
       await act(async()=>tree.unmount()); tree=null;
     }
@@ -99,8 +92,8 @@ test("주문 상한 +30%로 미체결된 날의 애프터장 매수를 실제 �
       await enter("예: 26.90", "30000");
       assert.equal(confirm().props.disabled, true);
       await enter("예: 26.90", "132.50");
-      assert.equal(confirm().props.disabled, true);
-      await act(async () => tree.root.findByType("select").props.onChange({ target: { value: "0.5" } }));
+      assert.equal(confirm().props.disabled, false);
+      assert.equal(tree.root.findAllByType("select").length, 0);
       await act(async () => confirm().props.onClick());
 
       assert.equal(saved.lastClose, 132);
