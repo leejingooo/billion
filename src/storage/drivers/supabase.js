@@ -113,8 +113,17 @@ export function createSupabaseDriver(url, anonKey) {
       },
       async onChange(cb) {
         const c = await getClient();
-        const { data } = c.auth.onAuthStateChange((_evt, session) => cb(session));
-        return () => data?.subscription?.unsubscribe();
+        let subscribed = true;
+        const { data } = c.auth.onAuthStateChange((_evt, session) => {
+          // Hydration calls Supabase again. Let auth finish notifying subscribers first.
+          setTimeout(() => {
+            if (subscribed) void cb(session);
+          }, 0);
+        });
+        return () => {
+          subscribed = false;
+          data?.subscription?.unsubscribe();
+        };
       },
     },
   };
